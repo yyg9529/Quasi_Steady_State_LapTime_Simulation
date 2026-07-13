@@ -31,3 +31,9 @@ ggv.feasible    % Nv x Nay, lateral feasibility
 ## LapResult
 
 结果至少包含 `lap_time_s`、`s_m`、`v_mps`、`ax_mps2`、`ay_mps2`、`limiter`、`ggv_used`、`options`、逐段时间和求解收敛信息。
+
+## Suspension lookup
+
+`read_simscape_suspension_lookup` 只读取离线导出的 CSV，并将角度从 deg 转为 rad；它不会打开或执行 Simscape 模型。`interp_suspension_lookup` 接收 mm 表示的 jounce，并返回 `camber_rad`、`toe_rad`、`motion_ratio` 和 `damper_stroke_mm`。默认禁止越界；只有显式指定 `OutOfRange="clamp"` 才会钳位。
+
+缺少 lookup 时使用 `make_constant_suspension`。该 fallback 不虚构 Motion Ratio，返回 `motion_ratio=NaN` 和 `motion_ratio_available=false`。V0.7 尚未定义轮荷到 jounce 的垂向平衡，因此悬架 lookup 不能改变 GGV。

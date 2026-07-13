@@ -16,7 +16,7 @@ QSS core 只查询 GGV，不直接调用轮胎或 Simscape。理论 GGV 的生�
 
 ## 层级依赖
 
-1. `data/` 与 `preprocessing/`：输入和边界适配。
+1. `data/` 与 `preprocessing/`：输入和边界适配；Simscape 仅在该层离线导出悬架 CSV。
 2. `src/vehicle|tire|aero|powertrain|brake`：可独立测试的物理模型。
 3. `src/ggv`：把物理模型压缩为速度相关的整车能力边界。
 4. `src/core`：固定赛线速度传播与时间积分。
@@ -24,6 +24,8 @@ QSS core 只查询 GGV，不直接调用轮胎或 Simscape。理论 GGV 的生�
 6. `src/dof7`：关键事件验证，不参与主圈速求解。
 
 `reference/` 是冻结快照，生产代码不得将其加入路径或在运行时读取其中资产。
+
+V0.7 的悬架层只提供几何 lookup 数据通道。把轮荷转换为 jounce 还需要弹簧、ARB、静态参考与垂向平衡模型；这些尚未实现，因此当前 GGV 生成器不会调用悬架 lookup。
 
 ## 闭环求解更正
 
