@@ -21,6 +21,10 @@ options = setDefault(options, "solver_tolerance_mps", 1e-8);
 options = setDefault(options, "limiter_tolerance_mps", 1e-5);
 options = setDefault(options, "accel_tolerance_mps2", 1e-5);
 options = setDefault(options, "speed_query_policy", "clamp");
+options = setDefault(options, "scale_min", 0.5);
+options = setDefault(options, "scale_max", 1.2);
+options = setDefault(options, "calibration_smoothing_window", 3);
+options = setDefault(options, "calibration_report_file", "");
 end
 
 function value = setDefault(value, name, defaultValue)

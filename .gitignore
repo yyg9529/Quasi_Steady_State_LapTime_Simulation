@@ -11,6 +11,7 @@ codegen/
 # Test and analysis outputs
 coverage/
 test-results/
+results/
 *.log
 
 # Local reference material

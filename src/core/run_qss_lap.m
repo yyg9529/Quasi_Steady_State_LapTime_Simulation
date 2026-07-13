@@ -19,6 +19,11 @@ else
         optionalModel(models, "aero"), optionalModel(models, "powertrain"), ...
         optionalModel(models, "brake"), options);
 end
+calibrationReport = struct();
+if isfield(models, "ggv_real") && ~isempty(models.ggv_real)
+    [ggv, calibrationReport] = calibrate_ggv( ...
+        ggv, models.ggv_real, options);
+end
 
 [vLat_mps, lateralLimiter] = calc_lateral_speed_limit(track, ggv, options);
 profile_mps = vLat_mps;
@@ -64,6 +69,7 @@ result.v_lateral_limit_mps = vLat_mps;
 result.segment_time_s = segmentTime_s;
 result.cumulative_time_s = cumulativeTime_s;
 result.track = track;
+result.calibration_report = calibrationReport;
 result.solver.converged = converged;
 result.solver.iterations = iIteration;
 result.solver.max_change_mps = maxChange_mps;
