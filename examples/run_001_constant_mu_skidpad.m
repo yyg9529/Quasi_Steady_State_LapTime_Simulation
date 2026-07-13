@@ -17,7 +17,8 @@ track = read_track_csv(trackFile);
 
 options = default_qss_options();
 options.v_max_mps = 30;
-options.v_grid_mps = (0:0.25:30).';
+options.v_grid_mps = (0:0.5:30).';
+options.ay_grid_g = -2:0.05:2;
 result = run_qss_lap(track, vehicle, models, options);
 
 radius_m = 1 / abs(track.kappa_1pm(1));

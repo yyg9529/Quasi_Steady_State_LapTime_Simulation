@@ -19,7 +19,8 @@ classdef runQssLapTest < matlab.unittest.TestCase
             testCase.Models.brake = brake_baseline();
             testCase.Options = default_qss_options();
             testCase.Options.v_max_mps = 35;
-            testCase.Options.v_grid_mps = (0:0.25:35).';
+            testCase.Options.v_grid_mps = (0:0.5:35).';
+            testCase.Options.ay_grid_g = -2:0.05:2;
         end
     end
 
