@@ -2,7 +2,7 @@
 
 面向 Formula Student / FSAE 的 MATLAB 准稳态圈速仿真项目。
 
-当前版本：V0.7 开发基线。除完整 QSS/GGV 主链和实车校准外，已支持单参数敏感性、20+ case DOE、冻结 baseline 校准、距离加权 limiter 汇总、结果绘图和离线悬架几何 lookup；Simscape 不属于运行时依赖。
+当前版本：V0.8 开发基线。除完整 QSS/GGV 主链和实车校准外，已支持单参数敏感性、20+ case DOE、离线悬架几何 lookup，以及独立于 QSS core 的 7DOF 加速/制动/受控定半径验证；Simscape 不属于运行时依赖。
 
 ## 项目目标
 
@@ -52,7 +52,8 @@ assertSuccess(results)
 1. V0.1：常数摩擦系数 GGV、固定赛线闭环 QSS 和解析基准。
 2. V0.2–V0.4：四轮载荷、气动、载荷敏感轮胎、动力与制动约束。
 3. V0.5–V0.7：实车 GGV 校准、DOE、离线悬架 lookup。
-4. V0.8–V1.0：7DOF 事件验证、高级轮胎接口和稳定回归。
+4. V0.8：简化 slip-force 本构和 7DOF 关键事件验证。
+5. V0.9–V1.0：高级轮胎接口和稳定回归。
 
 ## 当前不支持
 

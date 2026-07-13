@@ -28,6 +28,8 @@ ggv.feasible    % Nv x Nay, lateral feasibility
 
 `brake.front_bias` 是总制动力需求的前轴比例。制动附着上限同时满足前轴和后轴容量，而不是简单使用四轮容量之和。`max_decel_g_mechanical` 是概念阶段的质量比例限制；质量 DOE 若需要固定硬件能力，应改用 `max_total_brake_force_N`。
 
+7DOF 使用额外的 `brake.max_total_brake_torque_Nm`，含义为四轮轮端机械制动扭矩总和。扭矩命令取该值、`max_total_brake_force_N * R` 与 `max_decel_g_mechanical * m * g * R` 的最小值，再按 `front_bias` 分轴、同轴均分；该字段避免只从整车减速度上限反推不唯一的四轮扭矩。
+
 ## LapResult
 
 结果至少包含 `lap_time_s`、`s_m`、`v_mps`、`ax_mps2`、`ay_mps2`、`limiter`、`ggv_used`、`options`、逐段时间和求解收敛信息。
@@ -37,3 +39,7 @@ ggv.feasible    % Nv x Nay, lateral feasibility
 `read_simscape_suspension_lookup` 只读取离线导出的 CSV，并将角度从 deg 转为 rad；它不会打开或执行 Simscape 模型。`interp_suspension_lookup` 接收 mm 表示的 jounce，并返回 `camber_rad`、`toe_rad`、`motion_ratio` 和 `damper_stroke_mm`。默认禁止越界；只有显式指定 `OutOfRange="clamp"` 才会钳位。
 
 缺少 lookup 时使用 `make_constant_suspension`。该 fallback 不虚构 Motion Ratio，返回 `motion_ratio=NaN` 和 `motion_ratio_available=false`。V0.7 尚未定义轮荷到 jounce 的垂向平衡，因此悬架 lookup 不能改变 GGV。
+
+## 7DOF transient tire model
+
+`tire.model_type` 继续描述 QSS/GGV 使用的包络模型；`tire.slip_force.model_type` 独立描述 7DOF 使用的滑移—力本构。二者不能互相冒充。`vehicle_7dof_ode` 的输入状态和输出诊断见 `docs/dof7_validation.md`。

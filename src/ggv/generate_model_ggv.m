@@ -103,6 +103,11 @@ ggv.ax_min_lateral_boundary_g = axLateralBoundary_g;
 ggv.source = "model_" + string(tire.model_type) + "_v0.4";
 ggv.notes = "Four-wheel loads, capacity-weighted Fy, p-norm combined slip";
 ggv.gravity_mps2 = options.gravity_mps2;
+ggv.aero_enabled = logical(aero.enabled);
+ggv.provenance.vehicle = vehicle;
+ggv.provenance.tire = tire;
+ggv.provenance.powertrain = powertrain;
+ggv.provenance.brake = brake;
 ggv.options = options;
 end
 

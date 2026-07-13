@@ -47,5 +47,36 @@ classdef calcBrakeLimitTest < matlab.unittest.TestCase
                 -testCase.Options.gravity_mps2, AbsTol=1e-12);
             testCase.verifyEqual(result.limiter, "brake_mechanical");
         end
+
+        function testInfiniteTorqueLimitDoesNotRequireTireRadius(testCase)
+            loads.Fx_available_N = 1000 * ones(4, 1);
+            loads.vehicle_mass_kg = 300;
+            brake = struct("enabled", true, "front_bias", 0.5, ...
+                "max_decel_g_mechanical", 1.0, ...
+                "max_total_brake_force_N", inf);
+
+            result = calc_brake_limit(20, loads, struct(), ...
+                brake, testCase.Options);
+
+            testCase.verifyEqual(result.ax_min_mps2, ...
+                -testCase.Options.gravity_mps2, AbsTol=1e-12);
+        end
+
+        function testFiniteWheelTorqueLimitUsesRollingRadius(testCase)
+            loads.Fx_available_N = 1e5 * ones(4, 1);
+            loads.vehicle_mass_kg = 300;
+            tire.rolling_radius_m = 0.25;
+            brake = struct("enabled", true, "front_bias", 0.5, ...
+                "max_decel_g_mechanical", inf, ...
+                "max_total_brake_force_N", inf, ...
+                "max_total_brake_torque_Nm", 1000);
+
+            result = calc_brake_limit(20, loads, tire, ...
+                brake, testCase.Options);
+
+            testCase.verifyEqual(result.Fx_brake_min_N, -4000, ...
+                AbsTol=1e-12);
+            testCase.verifyEqual(result.limiter, "brake_mechanical");
+        end
     end
 end

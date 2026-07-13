@@ -29,7 +29,9 @@ else
         frontCapacity_N, rearCapacity_N, brake.front_bias);
     decelForce_N = brake.max_decel_g_mechanical ...
         * loads.vehicle_mass_kg * options.gravity_mps2;
-    mechanicalLimit_N = min(brake.max_total_brake_force_N, decelForce_N);
+    torqueLimit_N = brakeTorqueForceLimit(brake, tire);
+    mechanicalLimit_N = min([brake.max_total_brake_force_N, ...
+        decelForce_N, torqueLimit_N]);
     [forceMagnitude_N, index] = min([biasLimited_N, mechanicalLimit_N]);
     labels = ["brake_traction_bias", "brake_mechanical"];
     limiter = labels(index);
@@ -41,6 +43,22 @@ brakeResult.limiter = limiter;
 brakeResult.speed_mps = v_mps;
 brakeResult.front_capacity_N = sum(availableFx_N(1:2));
 brakeResult.rear_capacity_N = sum(availableFx_N(3:4));
+end
+
+function torqueLimit_N = brakeTorqueForceLimit(brake, tire)
+if isinf(brake.max_total_brake_torque_Nm)
+    torqueLimit_N = inf;
+    return
+end
+if ~isfield(tire, "rolling_radius_m") ...
+        || ~isscalar(tire.rolling_radius_m) ...
+        || ~isfinite(tire.rolling_radius_m) ...
+        || tire.rolling_radius_m <= 0
+    error("QSSLTS:BrakeParameters", ...
+        "A positive finite tire.rolling_radius_m is required " ...
+        + "for a finite brake torque limit.");
+end
+torqueLimit_N = brake.max_total_brake_torque_Nm / tire.rolling_radius_m;
 end
 
 function totalLimit_N = biasLimitedForce(front_N, rear_N, frontBias)
@@ -83,9 +101,13 @@ end
 if ~isfield(model, "max_total_brake_force_N")
     model.max_total_brake_force_N = inf;
 end
+if ~isfield(model, "max_total_brake_torque_Nm")
+    model.max_total_brake_torque_Nm = inf;
+end
 if model.front_bias < 0 || model.front_bias > 1 ...
         || model.max_decel_g_mechanical < 0 ...
-        || model.max_total_brake_force_N < 0
+        || model.max_total_brake_force_N < 0 ...
+        || model.max_total_brake_torque_Nm < 0
     error("QSSLTS:BrakeParameters", ...
         "Brake bias/limits are outside valid bounds.");
 end
