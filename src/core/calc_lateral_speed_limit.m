@@ -26,6 +26,7 @@ for iPoint = 1:nPoint
     if lateralResidual(vUpper_mps, abs(curvature_1pm), ...
             turnSign, ggv, options.gravity_mps2) >= 0
         vLat_mps(iPoint) = vUpper_mps;
+        limiter(iPoint) = "not_lateral_limited";
         continue
     end
 

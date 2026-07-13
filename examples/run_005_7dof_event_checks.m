@@ -15,17 +15,20 @@ aeroOff = struct("enabled", false);
 ggv = generate_model_ggv( ...
     vehicle, tire, aeroOff, powertrain, brake, ggvOptions);
 
+accelOptions = struct();
 accelOptions.target_speed_mps = 15;
 accelOptions.ggv = ggv;
 accel = run_7dof_accel_event( ...
     vehicle, tire, powertrain, brake, accelOptions);
 
+brakeOptions = struct();
 brakeOptions.initial_speed_mps = 15;
 brakeOptions.stop_speed_mps = 2;
 brakeOptions.ggv = ggv;
 braking = run_7dof_brake_event( ...
     vehicle, tire, powertrain, brake, brakeOptions);
 
+radiusOptions = struct();
 radiusOptions.speed_grid_mps = (6:2:20).';
 radiusOptions.settle_time_s = 3;
 radiusOptions.curvature_tolerance_frac = 0.20;

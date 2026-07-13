@@ -69,5 +69,22 @@ classdef runQssLapTest < matlab.unittest.TestCase
             testCase.verifyEqual(shifted.v_mps, circshift(original.v_mps, -2), ...
                 AbsTol=1e-7);
         end
+
+        function testNonbindingCurvatureAtSpeedCapIsTopSpeedLimited(testCase)
+            track.s_m = [0; 10; 20; 30];
+            track.ds_m = 10 * ones(4, 1);
+            track.kappa_1pm = 0.001 * ones(4, 1);
+            track.is_closed = true;
+            options = testCase.Options;
+            options.v_max_mps = 12;
+            options.v_grid_mps = (0:0.5:10).';
+
+            result = run_qss_lap(track, testCase.Vehicle, ...
+                testCase.Models, options);
+
+            testCase.verifyEqual(result.v_mps, 10 * ones(4, 1), ...
+                AbsTol=1e-8);
+            testCase.verifyTrue(all(result.limiter == "top_speed"));
+        end
     end
 end

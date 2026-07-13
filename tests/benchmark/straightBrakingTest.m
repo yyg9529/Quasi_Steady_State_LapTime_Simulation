@@ -16,23 +16,31 @@ classdef straightBrakingTest < matlab.unittest.TestCase
             track.kappa_1pm = zeros(21, 1);
             track.is_closed = false;
             options = default_qss_options();
-            options.v_grid_mps = (0:1:40).';
             options.ay_grid_g = -2:0.1:2;
             options.finish_speed_mps = 0;
-            ggv = generate_model_ggv(vehicle_baseline(), ...
+            options.v_grid_mps = (0:1:50).';
+            vehicle = vehicle_baseline();
+            vehicle.mass.cg_height_m = 0;
+            brake = brake_baseline();
+            brake.max_decel_g_mechanical = 1;
+            brake.max_total_brake_force_N = inf;
+            brake.max_total_brake_torque_Nm = inf;
+            brake.front_bias = 0.5;
+            ggv = generate_model_ggv(vehicle, ...
                 tire_simple_baseline(), struct("enabled", false), ...
-                struct("enabled", false), brake_baseline(), options);
-            inputSpeed_mps = 30 * ones(21, 1);
-            lateralLimit_mps = 40 * ones(21, 1);
+                struct("enabled", false), brake, options);
+            inputSpeed_mps = 50 * ones(21, 1);
+            lateralLimit_mps = 50 * ones(21, 1);
 
-            brakingSpeed_mps = backward_pass(track, ggv, ...
+            [brakingSpeed_mps, ~, info] = backward_pass(track, ggv, ...
                 inputSpeed_mps, lateralLimit_mps, options);
+            expectedSpeed_mps = sqrt(2 * options.gravity_mps2 ...
+                * (track.s_m(end) - track.s_m));
 
             testCase.verifyEqual(brakingSpeed_mps(end), 0, AbsTol=1e-12);
-            testCase.verifyLessThanOrEqual(diff(brakingSpeed_mps), ...
-                1e-9 * ones(20, 1));
-            testCase.verifyGreaterThanOrEqual(brakingSpeed_mps, zeros(21, 1));
-            testCase.verifyGreaterThan(brakingSpeed_mps(1), 0);
+            testCase.verifyEqual(brakingSpeed_mps, expectedSpeed_mps, ...
+                AbsTol=1e-8);
+            testCase.verifyTrue(info.converged);
         end
     end
 end

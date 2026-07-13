@@ -43,12 +43,17 @@ fastestId = ranking.case_id(1);
 slowestId = ranking.case_id(end);
 
 doeResult.ranking = ranking;
+doeResult.baseline_result = baselineResult;
 doeResult.case_results = caseResults;
 doeResult.baseline_lap_time_s = baselineResult.lap_time_s;
 doeResult.fastest_case_id = fastestId;
 doeResult.slowest_case_id = slowestId;
 doeResult.fastest_summary = summarize_lap_result(caseResults{fastestId});
 doeResult.slowest_summary = summarize_lap_result(caseResults{slowestId});
+doeResult.fastest_limiter = summarize_limiter_usage(caseResults{fastestId});
+doeResult.slowest_limiter = summarize_limiter_usage(caseResults{slowestId});
+doeResult.extreme_limiter_comparison = compare_limiter_usage( ...
+    caseResults{fastestId}, caseResults{slowestId});
 doeResult.calibration_mode = context.calibration_mode;
 doeResult.parameter_names = parameterNames;
 end

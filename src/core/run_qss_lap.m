@@ -92,6 +92,7 @@ function limiter = classifyLimiters(v_mps, vLat_mps, ...
         ax_mps2, ay_mps2, ggv, lateralLimiter, options)
 nPoint = numel(v_mps);
 limiter = strings(nPoint, 1);
+speedCap_mps = min(options.v_max_mps, ggv.v_mps(end));
 for iPoint = 1:nPoint
     isAtLateralLimit = abs(v_mps(iPoint) - vLat_mps(iPoint)) ...
         <= options.limiter_tolerance_mps ...
@@ -103,15 +104,23 @@ for iPoint = 1:nPoint
 
     ay_g = ay_mps2(iPoint) / options.gravity_mps2;
     cap = interp_ggv(ggv, v_mps(iPoint), ay_g, options);
-    if ax_mps2(iPoint) > options.accel_tolerance_mps2
+    isAtAccelerationLimit = cap.is_feasible ...
+        && abs(ax_mps2(iPoint) - cap.ax_max_mps2) ...
+        <= options.accel_tolerance_mps2;
+    isAtBrakingLimit = cap.is_feasible ...
+        && abs(ax_mps2(iPoint) - cap.ax_min_mps2) ...
+        <= options.accel_tolerance_mps2;
+    if isAtAccelerationLimit
         limiter(iPoint) = cap.accel_limiter;
-    elseif ax_mps2(iPoint) < -options.accel_tolerance_mps2
+    elseif isAtBrakingLimit
         limiter(iPoint) = cap.brake_limiter;
-    elseif v_mps(iPoint) >= options.v_max_mps ...
+    elseif v_mps(iPoint) >= speedCap_mps ...
             - options.limiter_tolerance_mps
         limiter(iPoint) = "top_speed";
-    else
+    elseif abs(ax_mps2(iPoint)) <= options.accel_tolerance_mps2
         limiter(iPoint) = "coasting";
+    else
+        limiter(iPoint) = "unconstrained";
     end
 end
 end

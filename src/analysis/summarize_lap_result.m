@@ -27,6 +27,7 @@ summary.percent_brake_limited = weightedPercent( ...
     weights_m, totalDistance_m);
 summary.percent_top_speed_limited = weightedPercent( ...
     limiter == "top_speed", weights_m, totalDistance_m);
+summary.limiter_table = summarize_limiter_usage(result);
 end
 
 function percentage = weightedPercent(mask, weights, total)

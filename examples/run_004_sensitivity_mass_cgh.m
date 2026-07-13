@@ -3,6 +3,7 @@ projectRoot = fileparts(fileparts(mfilename("fullpath")));
 addpath(projectRoot);
 project_setup();
 
+baseConfig = struct();
 baseConfig.track = read_track_csv(fullfile(projectRoot, "data", "track", ...
     "simple_track.csv"));
 baseConfig.vehicle = vehicle_baseline();
@@ -16,11 +17,13 @@ baseConfig.options = default_qss_options();
 baseConfig.options.v_grid_mps = [0:2:44, 45].';
 baseConfig.options.ay_grid_g = -4:0.2:4;
 
+massSweep = struct();
 massSweep.parameter = "vehicle.mass.total_kg";
 massSweep.values = (260:20:340).';
 massSweep.make_plot = true;
 massResult = run_sensitivity_sweep(baseConfig, massSweep);
 
+cghSweep = struct();
 cghSweep.parameter = "vehicle.mass.cg_height_m";
 cghSweep.values = (0.15:0.05:0.35).';
 cghSweep.make_plot = true;

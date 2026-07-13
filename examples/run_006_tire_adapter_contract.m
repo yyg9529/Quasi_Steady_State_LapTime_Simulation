@@ -5,6 +5,7 @@ project_setup();
 
 tire = tire_load_sensitive_baseline();
 tire.slip_force = make_unitire_placeholder("simple");
+operatingPoint = struct();
 operatingPoint.wheel_vx_mps = 40.193 / 3.6;
 operatingPoint.wheel_omega_radps = 48.8;
 operatingPoint.wheel_side = "LEFT";

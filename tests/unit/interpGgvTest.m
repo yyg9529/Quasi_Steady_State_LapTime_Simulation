@@ -59,5 +59,24 @@ classdef interpGgvTest < matlab.unittest.TestCase
             testCase.verifyEqual(cap.ax_max_mps2, 0, AbsTol=1e-9);
             testCase.verifyEqual(cap.ax_min_mps2, 0, AbsTol=1e-9);
         end
+
+        function testFeasibleBoundaryDoesNotUseInfeasibleGridLabel(testCase)
+            ggv = testCase.Ggv;
+            positiveOutside = ggv.ay_g > 1.26;
+            ggv.ay_limit_pos_g(:) = 1.26;
+            ggv.feasible(:, positiveOutside) = false;
+            ggv.accel_limiter(:, positiveOutside) = ...
+                "lateral_infeasible";
+            ggv.brake_limiter(:, positiveOutside) = ...
+                "lateral_infeasible";
+
+            cap = interp_ggv(ggv, 20, 1.26);
+
+            testCase.verifyTrue(cap.is_feasible);
+            testCase.verifyNotEqual(cap.accel_limiter, ...
+                "lateral_infeasible");
+            testCase.verifyNotEqual(cap.brake_limiter, ...
+                "lateral_infeasible");
+        end
     end
 end

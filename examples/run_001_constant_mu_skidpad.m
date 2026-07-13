@@ -4,6 +4,7 @@ addpath(projectRoot);
 project_setup();
 
 vehicle = vehicle_baseline();
+models = struct();
 models.tire = tire_simple_baseline();
 models.aero = aero_baseline();
 models.aero.enabled = false;

@@ -55,16 +55,35 @@ axMax_g = interpolateWithExactBoundary(ggv.ay_g, axMaxRow_g, ay_g, ...
 axMin_g = interpolateWithExactBoundary(ggv.ay_g, axMinRow_g, ay_g, ...
     negativeLimit_g, positiveLimit_g, axMinBoundary_g);
 
-[~, iSpeed] = min(abs(ggv.v_mps - vQuery_mps));
-[~, iLateral] = min(abs(ggv.ay_g - ay_g));
 cap.ax_max_mps2 = axMax_g * ggv.gravity_mps2;
 cap.ax_min_mps2 = axMin_g * ggv.gravity_mps2;
 cap.is_feasible = isfinite(axMax_g) && isfinite(axMin_g);
-cap.accel_limiter = ggv.accel_limiter(iSpeed, iLateral);
-cap.brake_limiter = ggv.brake_limiter(iSpeed, iLateral);
+cap.accel_limiter = nearestFeasibleLimiter( ...
+    ggv, "accel_limiter", vQuery_mps, ay_g);
+cap.brake_limiter = nearestFeasibleLimiter( ...
+    ggv, "brake_limiter", vQuery_mps, ay_g);
 cap.limiter = cap.accel_limiter;
 cap.lateral_limit_g = lateralLimit_g;
 cap.was_speed_clamped = wasClamped;
+end
+
+function limiter = nearestFeasibleLimiter(ggv, fieldName, vQuery_mps, ay_g)
+labels = string(ggv.(fieldName));
+[~, speedOrder] = sort(abs(ggv.v_mps - vQuery_mps), "ascend");
+for orderIndex = 1:numel(speedOrder)
+    speedIndex = speedOrder(orderIndex);
+    rowValid = ggv.feasible(speedIndex, :) ...
+        & labels(speedIndex, :) ~= "lateral_infeasible" ...
+        & strlength(labels(speedIndex, :)) > 0;
+    if any(rowValid)
+        lateralIndices = find(rowValid);
+        [~, localIndex] = min(abs(ggv.ay_g(lateralIndices) - ay_g));
+        limiter = labels(speedIndex, lateralIndices(localIndex));
+        return
+    end
+end
+error("QSSLTS:GGVLimiter", ...
+    "No feasible %s label exists in the GGV map.", fieldName);
 end
 
 function value_g = interpolateBoundary( ...

@@ -1,0 +1,53 @@
+function usage = summarize_limiter_usage(result)
+%SUMMARIZE_LIMITER_USAGE Return distance-weighted usage of every limiter.
+
+    arguments
+        result (1, 1) struct
+    end
+
+    if ~isfield(result, "track") || ~isfield(result.track, "ds_m") ...
+            || ~isfield(result, "limiter")
+        error("QSSLTS:LimiterSummary", ...
+            "Result must contain track.ds_m and limiter.");
+    end
+    limiter = string(result.limiter(:));
+    weights_m = result.track.ds_m(:);
+    if numel(weights_m) == numel(limiter) - 1
+        weights_m(end + 1, 1) = 0;
+    elseif numel(weights_m) ~= numel(limiter)
+        error("QSSLTS:LimiterSummary", ...
+            "Segment weights do not match the limiter vector.");
+    end
+    if isempty(limiter) || any(~isfinite(weights_m)) ...
+            || any(weights_m < 0) || sum(weights_m) <= 0
+        error("QSSLTS:LimiterSummary", ...
+            "Limiter labels and segment weights must be valid and nonempty.");
+    end
+    knownLimiters = ["lateral", "traction", "tire", "torque", ...
+        "power", "top_speed", "coasting", "unconstrained", ...
+        "brake_traction_bias", "brake_mechanical", ...
+        "brake_disabled", "front_axle_lift", "rear_axle_lift", ...
+        "measured"];
+    if any(strlength(limiter) == 0) || any(~ismember(limiter, knownLimiters))
+        invalid = unique(limiter(strlength(limiter) == 0 ...
+            | ~ismember(limiter, knownLimiters)));
+        error("QSSLTS:LimiterSummary", ...
+            "Unsupported or infeasible limiter labels: %s", ...
+            strjoin(compose('"%s"', invalid), ", "));
+    end
+
+    limiterNames = unique(limiter, "stable");
+    count = zeros(numel(limiterNames), 1);
+    distance_m = zeros(numel(limiterNames), 1);
+    for index = 1:numel(limiterNames)
+        mask = limiter == limiterNames(index);
+        count(index) = nnz(mask);
+        distance_m(index) = sum(weights_m(mask));
+    end
+    percent_distance = 100 * distance_m / sum(weights_m);
+    usage = table(limiterNames, count, distance_m, percent_distance, ...
+        VariableNames=["limiter", "point_count", "distance_m", ...
+        "percent_distance"]);
+    usage = sortrows(usage, ...
+        ["distance_m", "limiter"], ["descend", "ascend"]);
+end
