@@ -40,10 +40,13 @@ wheelLift = false(nSpeed, nLateral);
 ayLimitPos_g = zeros(nSpeed, 1);
 ayLimitNeg_g = zeros(nSpeed, 1);
 lateralLimitTruncated = false(nSpeed, 2);
+axLateralBoundary_g = zeros(nSpeed, 1);
 
 for iSpeed = 1:nSpeed
     speed_mps = vGrid_mps(iSpeed);
     aeroForce = calc_aero_forces(speed_mps, aero);
+    axLateralBoundary_g(iSpeed) = -aeroForce.drag_N ...
+        / vehicle.mass.total_kg / options.gravity_mps2;
     [ayLimitPos_g(iSpeed), lateralLimitTruncated(iSpeed, 1)] = ...
         solveLateralLimit(speed_mps, 1, vehicle, tire, aeroForce, ...
         ayGrid_g, options);
@@ -95,6 +98,8 @@ ggv.solve_residual_accel_mps2 = accelResidual_mps2;
 ggv.solve_residual_brake_mps2 = brakeResidual_mps2;
 ggv.wheel_lift = wheelLift;
 ggv.lateral_limit_truncated = lateralLimitTruncated;
+ggv.ax_max_lateral_boundary_g = axLateralBoundary_g;
+ggv.ax_min_lateral_boundary_g = axLateralBoundary_g;
 ggv.source = "model_" + string(tire.model_type) + "_v0.4";
 ggv.notes = "Four-wheel loads, capacity-weighted Fy, p-norm combined slip";
 ggv.gravity_mps2 = options.gravity_mps2;

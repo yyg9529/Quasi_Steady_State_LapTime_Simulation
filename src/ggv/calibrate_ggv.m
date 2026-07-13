@@ -36,21 +36,17 @@ rawBrakeScale = realBrakeAtModel_g ./ modelBrake0_g;
 [scaleAccel, coverageAccel] = processScale(rawAccelScale, options);
 [scaleBrake, coverageBrake] = processScale(rawBrakeScale, options);
 
-ggvCalibrated = ggvModel;
-[ggvCalibrated.ax_max_g, ggvCalibrated.ax_min_g, ...
-    ggvCalibrated.feasible, ggvCalibrated.accel_limiter, ...
-    ggvCalibrated.brake_limiter] = deformCapability( ...
-    ggvModel, scaleLat, scaleAccel, scaleBrake);
-ggvCalibrated.ay_limit_pos_g = ggvModel.ay_limit_pos_g .* scaleLat;
-ggvCalibrated.ay_limit_neg_g = ggvModel.ay_limit_neg_g .* scaleLat;
+scaleTable = table(modelSpeed_mps, scaleLat, scaleAccel, scaleBrake, ...
+    VariableNames=["v_mps", "scale_lat", "scale_acc", "scale_brake"]);
+ggvCalibrated = apply_ggv_calibration_scales(ggvModel, scaleTable);
 ggvCalibrated.source = "calibrated(" + string(ggvModel.source) + ")";
 ggvCalibrated.notes = "Bounded residual calibration from " ...
     + string(ggvReal.source);
 
-report.scale_table = table(modelSpeed_mps, scaleLat, scaleAccel, scaleBrake, ...
-    coverageLat, coverageAccel, coverageBrake, ...
-    VariableNames=["v_mps", "scale_lat", "scale_acc", "scale_brake", ...
-    "coverage_lat", "coverage_acc", "coverage_brake"]);
+report.scale_table = scaleTable;
+report.scale_table.coverage_lat = coverageLat;
+report.scale_table.coverage_acc = coverageAccel;
+report.scale_table.coverage_brake = coverageBrake;
 report.raw_scale_lat = rawLatScale;
 report.raw_scale_acc = rawAccelScale;
 report.raw_scale_brake = rawBrakeScale;
@@ -98,39 +94,6 @@ if any(coverage)
 end
 scale = clamp(scale, options.scale_min, options.scale_max);
 scale(~coverage) = 1;
-end
-
-function [axMax_g, axMin_g, feasible, accelLimiter, brakeLimiter] = ...
-        deformCapability(ggv, scaleLat, scaleAccel, scaleBrake)
-axMax_g = zeros(size(ggv.ax_max_g));
-axMin_g = zeros(size(ggv.ax_min_g));
-feasible = false(size(ggv.feasible));
-accelLimiter = repmat("lateral_infeasible", size(ggv.accel_limiter));
-brakeLimiter = repmat("lateral_infeasible", size(ggv.brake_limiter));
-
-for iSpeed = 1:numel(ggv.v_mps)
-    mappedAy_g = ggv.ay_g / scaleLat(iSpeed);
-    rowFeasible = mappedAy_g <= ggv.ay_limit_pos_g(iSpeed) + 1e-12 ...
-        & mappedAy_g >= ggv.ay_limit_neg_g(iSpeed) - 1e-12;
-    axMax_g(iSpeed, :) = interp1(ggv.ay_g, ggv.ax_max_g(iSpeed, :), ...
-        mappedAy_g, "linear", 0) * scaleAccel(iSpeed);
-    axMin_g(iSpeed, :) = interp1(ggv.ay_g, ggv.ax_min_g(iSpeed, :), ...
-        mappedAy_g, "linear", 0) * scaleBrake(iSpeed);
-    feasible(iSpeed, :) = rowFeasible;
-
-    nearestIndex = arrayfun(@(value) nearestAyIndex(ggv.ay_g, value), ...
-        mappedAy_g);
-    accelRow = ggv.accel_limiter(iSpeed, nearestIndex);
-    brakeRow = ggv.brake_limiter(iSpeed, nearestIndex);
-    accelRow(~rowFeasible) = "lateral_infeasible";
-    brakeRow(~rowFeasible) = "lateral_infeasible";
-    accelLimiter(iSpeed, :) = accelRow;
-    brakeLimiter(iSpeed, :) = brakeRow;
-end
-end
-
-function index = nearestAyIndex(ayGrid_g, value_g)
-[~, index] = min(abs(ayGrid_g - value_g));
 end
 
 function filename = saveCalibrationReport(scaleTable, filename)

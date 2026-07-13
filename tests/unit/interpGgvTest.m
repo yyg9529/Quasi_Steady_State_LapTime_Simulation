@@ -48,5 +48,16 @@ classdef interpGgvTest < matlab.unittest.TestCase
             testCase.verifyTrue(isnan(cap.ax_max_mps2));
             testCase.verifyEqual(cap.limiter, "lateral_infeasible");
         end
+
+        function testExactLateralBoundaryHasNoTireLongitudinalForce(testCase)
+            lateralLimit_g = interp1(testCase.Ggv.v_mps, ...
+                testCase.Ggv.ay_limit_pos_g, 20, "linear");
+
+            cap = interp_ggv(testCase.Ggv, 20, lateralLimit_g);
+
+            testCase.verifyTrue(cap.is_feasible);
+            testCase.verifyEqual(cap.ax_max_mps2, 0, AbsTol=1e-9);
+            testCase.verifyEqual(cap.ax_min_mps2, 0, AbsTol=1e-9);
+        end
     end
 end

@@ -2,7 +2,7 @@
 
 面向 Formula Student / FSAE 的 MATLAB 准稳态圈速仿真项目。
 
-当前版本：V0.5 开发基线。除理论 GGV、闭环 QSS、四轮载荷、气动、载荷敏感轮胎、动力与制动外，已支持实车 GGV 读取、限幅平滑校准和校准报告；Simscape 不属于运行时依赖。
+当前版本：V0.6 开发基线。除完整 QSS/GGV 主链和实车校准外，已支持单参数敏感性、20+ case DOE、冻结 baseline 校准、距离加权 limiter 汇总和结果绘图；Simscape 不属于运行时依赖。
 
 ## 项目目标
 

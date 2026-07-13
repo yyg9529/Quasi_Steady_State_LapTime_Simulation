@@ -40,10 +40,20 @@ if ~lateralFeasible || ay_g < ggv.ay_g(1) || ay_g > ggv.ay_g(end)
     return
 end
 
-axMax_g = interp2(ggv.ay_g, ggv.v_mps, ggv.ax_max_g, ...
-    ay_g, vQuery_mps, "linear");
-axMin_g = interp2(ggv.ay_g, ggv.v_mps, ggv.ax_min_g, ...
-    ay_g, vQuery_mps, "linear");
+axMaxRow_g = interp1(ggv.v_mps, ggv.ax_max_g, vQuery_mps, "linear");
+axMinRow_g = interp1(ggv.v_mps, ggv.ax_min_g, vQuery_mps, "linear");
+axMaxBoundary_g = interpolateBoundary(ggv, ...
+    "ax_max_lateral_boundary_g", axMaxRow_g, vQuery_mps, lateralLimit_g);
+axMinBoundary_g = interpolateBoundary(ggv, ...
+    "ax_min_lateral_boundary_g", axMinRow_g, vQuery_mps, lateralLimit_g);
+negativeLimit_g = interp1(ggv.v_mps, ggv.ay_limit_neg_g, ...
+    vQuery_mps, "linear");
+positiveLimit_g = interp1(ggv.v_mps, ggv.ay_limit_pos_g, ...
+    vQuery_mps, "linear");
+axMax_g = interpolateWithExactBoundary(ggv.ay_g, axMaxRow_g, ay_g, ...
+    negativeLimit_g, positiveLimit_g, axMaxBoundary_g);
+axMin_g = interpolateWithExactBoundary(ggv.ay_g, axMinRow_g, ay_g, ...
+    negativeLimit_g, positiveLimit_g, axMinBoundary_g);
 
 [~, iSpeed] = min(abs(ggv.v_mps - vQuery_mps));
 [~, iLateral] = min(abs(ggv.ay_g - ay_g));
@@ -55,6 +65,27 @@ cap.brake_limiter = ggv.brake_limiter(iSpeed, iLateral);
 cap.limiter = cap.accel_limiter;
 cap.lateral_limit_g = lateralLimit_g;
 cap.was_speed_clamped = wasClamped;
+end
+
+function value_g = interpolateBoundary( ...
+        ggv, fieldName, row_g, vQuery_mps, lateralLimit_g)
+if isfield(ggv, fieldName)
+    value_g = interp1(ggv.v_mps, ggv.(fieldName), ...
+        vQuery_mps, "linear");
+else
+    [~, index] = min(abs(ggv.ay_g - lateralLimit_g));
+    value_g = row_g(index);
+end
+end
+
+function value_g = interpolateWithExactBoundary( ...
+        ayGrid_g, row_g, ayQuery_g, negativeLimit_g, positiveLimit_g, boundary_g)
+inside = ayGrid_g > negativeLimit_g & ayGrid_g < positiveLimit_g;
+augmentedAy_g = [negativeLimit_g, ayGrid_g(inside), positiveLimit_g];
+augmentedValue_g = [boundary_g, row_g(inside), boundary_g];
+[augmentedAy_g, uniqueIndex] = unique(augmentedAy_g, "sorted");
+augmentedValue_g = augmentedValue_g(uniqueIndex);
+value_g = interp1(augmentedAy_g, augmentedValue_g, ayQuery_g, "linear");
 end
 
 function cap = infeasibleCapability(limiter)

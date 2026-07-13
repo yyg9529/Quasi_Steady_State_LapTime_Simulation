@@ -49,6 +49,8 @@ feasible = isfinite(axMax_g) & isfinite(axMin_g);
 
 ayLimitPos_g = zeros(numel(vGrid_mps), 1);
 ayLimitNeg_g = zeros(numel(vGrid_mps), 1);
+axMaxBoundary_g = zeros(numel(vGrid_mps), 1);
+axMinBoundary_g = zeros(numel(vGrid_mps), 1);
 for iSpeed = 1:numel(vGrid_mps)
     validAy_g = ayGrid_g(feasible(iSpeed, :));
     if isempty(validAy_g) || ~any(validAy_g >= 0) || ~any(validAy_g <= 0)
@@ -57,6 +59,12 @@ for iSpeed = 1:numel(vGrid_mps)
     end
     ayLimitPos_g(iSpeed) = max(validAy_g);
     ayLimitNeg_g(iSpeed) = min(validAy_g);
+    positiveIndex = find(ayGrid_g == ayLimitPos_g(iSpeed), 1);
+    negativeIndex = find(ayGrid_g == ayLimitNeg_g(iSpeed), 1);
+    axMaxBoundary_g(iSpeed) = mean( ...
+        axMax_g(iSpeed, [negativeIndex, positiveIndex]));
+    axMinBoundary_g(iSpeed) = mean( ...
+        axMin_g(iSpeed, [negativeIndex, positiveIndex]));
 end
 
 accelLimiter = repmat("measured", size(feasible));
@@ -73,6 +81,8 @@ ggvReal.ay_limit_pos_g = ayLimitPos_g;
 ggvReal.ay_limit_neg_g = ayLimitNeg_g;
 ggvReal.accel_limiter = accelLimiter;
 ggvReal.brake_limiter = brakeLimiter;
+ggvReal.ax_max_lateral_boundary_g = axMaxBoundary_g;
+ggvReal.ax_min_lateral_boundary_g = axMinBoundary_g;
 ggvReal.gravity_mps2 = 9.80665;
 ggvReal.source = "real_csv";
 ggvReal.source_file = filename;

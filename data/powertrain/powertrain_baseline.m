@@ -6,5 +6,6 @@ powertrain.layout = "RWD";
 powertrain.max_power_W = 80000;
 powertrain.max_total_wheel_torque_Nm = 1000;
 powertrain.max_speed_mps = 45;
+powertrain.overall_gear_ratio = 1.0;
 powertrain.drive_efficiency = 0.90;
 end
