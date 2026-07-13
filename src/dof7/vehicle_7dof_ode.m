@@ -42,7 +42,7 @@ function [dx, diagnostics] = vehicle_7dof_ode( ...
     [loads, tireForce, FxBody_N, FyBody_N, loadSolution] = ...
         solveWheelForces( ...
         vx_mps, yawRate_radps, slipRatio, slipAngle_rad, ...
-        wheelSteer_rad, vehicle, tire);
+        wheelVx_mps, wheelSpeed_radps, wheelSteer_rad, vehicle, tire);
     totalFx_N = sum(FxBody_N);
     totalFy_N = sum(FyBody_N);
     yawMoment_Nm = sum(wheelX_m .* FyBody_N - wheelY_m .* FxBody_N);
@@ -68,6 +68,11 @@ function [dx, diagnostics] = vehicle_7dof_ode( ...
     diagnostics.Fz_N = loads.Fz_vector_N;
     diagnostics.Fx_wheel_N = tireForce.Fx_N;
     diagnostics.Fy_wheel_N = tireForce.Fy_N;
+    if isfield(tireForce, "is_extrapolated")
+        diagnostics.tire_extrapolated = tireForce.is_extrapolated;
+    else
+        diagnostics.tire_extrapolated = false(4, 1);
+    end
     diagnostics.Fx_body_N = FxBody_N;
     diagnostics.Fy_body_N = FyBody_N;
     diagnostics.drive_torque_Nm = driveTorque_Nm;
@@ -237,14 +242,21 @@ function [wheelVx_mps, wheelVy_mps] = wheelVelocities( ...
 end
 
 function [loads, force, FxBody_N, FyBody_N, solution] = solveWheelForces( ...
-        vx_mps, yawRate_radps, slipRatio, slipAngle_rad, steer_rad, ...
-        vehicle, tire)
+        vx_mps, yawRate_radps, slipRatio, slipAngle_rad, wheelVx_mps, ...
+        wheelSpeed_radps, steer_rad, vehicle, tire)
     axGuess_mps2 = 0;
     ayGuess_mps2 = vx_mps * yawRate_radps;
     tolerance_mps2 = 1e-5;
     maximumIterations = 12;
     converged = false;
     residual_mps2 = inf;
+    operatingPoint.wheel_vx_mps = wheelVx_mps;
+    operatingPoint.wheel_omega_radps = wheelSpeed_radps;
+    operatingPoint.wheel_side = ["LEFT"; "RIGHT"; "LEFT"; "RIGHT"];
+    if isfield(tire.slip_force, "operating_pressure_Pa")
+        operatingPoint.pressure_Pa = ...
+            tire.slip_force.operating_pressure_Pa;
+    end
     for iteration = 1:maximumIterations
         state.v_mps = max(vx_mps, 0);
         state.ax_mps2 = axGuess_mps2;
@@ -252,7 +264,7 @@ function [loads, force, FxBody_N, FyBody_N, solution] = solveWheelForces( ...
         state.suppress_warnings = true;
         loads = calc_wheel_loads(state, vehicle);
         force = tire_force_from_slip(slipRatio, slipAngle_rad, ...
-            loads.Fz_vector_N, zeros(4, 1), tire);
+            loads.Fz_vector_N, zeros(4, 1), tire, operatingPoint);
         cosine = cos(steer_rad);
         sine = sin(steer_rad);
         FxBody_N = cosine .* force.Fx_N - sine .* force.Fy_N;

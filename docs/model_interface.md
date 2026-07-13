@@ -43,3 +43,7 @@ ggv.feasible    % Nv x Nay, lateral feasibility
 ## 7DOF transient tire model
 
 `tire.model_type` 继续描述 QSS/GGV 使用的包络模型；`tire.slip_force.model_type` 独立描述 7DOF 使用的滑移—力本构。二者不能互相冒充。`vehicle_7dof_ode` 的输入状态和输出诊断见 `docs/dof7_validation.md`。
+
+V0.9 的 `external_adapter` 是无状态、确定性的稳态代数接口，不是带松弛长度的状态模型。它通过可选 `operatingPoint` 接收逐轮 `wheel_vx_mps`、`wheel_omega_radps`、`wheel_side` 和条件必需的 `pressure_Pa`；evaluator 同时接收 `kappa/alpha/Fz/camber`，返回内部 X-forward/Y-left 的 `Fx_N/Fy_N`。metadata、有效域、schema 和错误行为见 `docs/tire_adapter.md`。
+
+理论 GGV provenance 使用 `tire_envelope_provenance` 排除 `slip_force`。这是因为瞬态本构不参与 QSS 包络生成，且 evaluator 函数句柄不是稳定、可序列化的 GGV 身份。

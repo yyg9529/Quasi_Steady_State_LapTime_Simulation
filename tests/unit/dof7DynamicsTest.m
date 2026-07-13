@@ -221,6 +221,46 @@ classdef dof7DynamicsTest < matlab.unittest.TestCase
 
             testCase.verifyError(action, "QSSLTS:DOF7Vehicle");
         end
+
+        function testExternalTireAdapterCanReplaceConstitutiveModel(testCase)
+            [vehicle, tire, powertrain, brake] = baselineModels();
+            tire.slip_force = make_unitire_placeholder("simple");
+            tire.slip_force.metadata.source = "unit-test fixture";
+            tire.slip_force.metadata.evaluator_id = ...
+                "unit_test_constant_force_v1";
+            tire.slip_force.metadata.native_tire_side = "SYMMETRIC";
+            tire.slip_force.metadata.source_coordinate_convention = ...
+                "QSSLTS_X_FORWARD_Y_LEFT_Z_UP";
+            tire.slip_force.metadata.valid_domain = wideTireDomain();
+            tire.slip_force.evaluator = @constantTireEvaluator;
+            state = make_7dof_initial_state(10, tire);
+            input = struct("steer_rad", 0, "throttle", 0, "brake", 0);
+
+            [dx, diagnostics] = vehicle_7dof_ode( ...
+                0, state, input, vehicle, tire, powertrain, brake);
+
+            testCase.verifyEqual(dx(1), ...
+                40 / vehicle.mass.total_kg, AbsTol=1e-10);
+            testCase.verifyEqual(dx(2:3), zeros(2, 1), AbsTol=1e-10);
+            testCase.verifyEqual(dx(4:7), ...
+                -10 * tire.rolling_radius_m / tire.wheel_inertia_kgm2 ...
+                * ones(4, 1), AbsTol=1e-10);
+            testCase.verifyFalse(any(diagnostics.tire_extrapolated));
+        end
+
+        function testExternalExtrapolationIsExposedInDiagnostics(testCase)
+            [vehicle, tire, powertrain, brake] = baselineModels();
+            tire.slip_force = configuredExternalTire();
+            tire.slip_force.metadata.valid_domain.wheel_vx_mps = [0, 5];
+            tire.slip_force.metadata.extrapolation_policy = "allow";
+            state = make_7dof_initial_state(10, tire);
+            input = struct("steer_rad", 0, "throttle", 0, "brake", 0);
+
+            [~, diagnostics] = vehicle_7dof_ode( ...
+                0, state, input, vehicle, tire, powertrain, brake);
+
+            testCase.verifyTrue(all(diagnostics.tire_extrapolated));
+        end
     end
 end
 
@@ -229,4 +269,28 @@ function [vehicle, tire, powertrain, brake] = baselineModels()
     tire = tire_load_sensitive_baseline();
     powertrain = powertrain_baseline();
     brake = brake_baseline();
+end
+
+function domain = wideTireDomain()
+    domain.slip_ratio = [-1, 1];
+    domain.slip_angle_rad = [-1, 1];
+    domain.Fz_N = [1, 2000];
+    domain.camber_rad = [0, 0];
+    domain.wheel_vx_mps = [-100, 100];
+end
+
+function slipForce = configuredExternalTire()
+    slipForce = make_unitire_placeholder("simple");
+    slipForce.metadata.source = "unit-test fixture";
+    slipForce.metadata.evaluator_id = "unit_test_constant_force_v1";
+    slipForce.metadata.native_tire_side = "SYMMETRIC";
+    slipForce.metadata.source_coordinate_convention = ...
+        "QSSLTS_X_FORWARD_Y_LEFT_Z_UP";
+    slipForce.metadata.valid_domain = wideTireDomain();
+    slipForce.evaluator = @constantTireEvaluator;
+end
+
+function force = constantTireEvaluator(~, ~)
+    force.Fx_N = 10;
+    force.Fy_N = 0;
 end

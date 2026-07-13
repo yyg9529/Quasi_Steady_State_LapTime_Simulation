@@ -2,7 +2,7 @@
 
 面向 Formula Student / FSAE 的 MATLAB 准稳态圈速仿真项目。
 
-当前版本：V0.8 开发基线。除完整 QSS/GGV 主链和实车校准外，已支持单参数敏感性、20+ case DOE、离线悬架几何 lookup，以及独立于 QSS core 的 7DOF 加速/制动/受控定半径验证；Simscape 不属于运行时依赖。
+当前版本：V0.9 开发基线。除完整 QSS/GGV 主链和实车校准外，已支持单参数敏感性、20+ case DOE、离线悬架几何 lookup、独立 7DOF 关键事件验证，以及带有效域、坐标、轮胎侧和参数 schema 检查的高级轮胎适配器契约；Simscape 和外部轮胎 evaluator 不属于默认运行时依赖。
 
 ## 项目目标
 
@@ -53,13 +53,14 @@ assertSuccess(results)
 2. V0.2–V0.4：四轮载荷、气动、载荷敏感轮胎、动力与制动约束。
 3. V0.5–V0.7：实车 GGV 校准、DOE、离线悬架 lookup。
 4. V0.8：简化 slip-force 本构和 7DOF 关键事件验证。
-5. V0.9–V1.0：高级轮胎接口和稳定回归。
+5. V0.9：Magic Formula / UniTire placeholder 和稳态代数轮胎力适配契约。
+6. V1.0：冻结回归基线、文档和可复现实验。
 
 ## 当前不支持
 
 - 自由赛线优化、驾驶员模型和全赛道瞬态仿真；
 - 在线调用 Simscape；
-- 未经有效域和坐标转换验证的 Magic Formula / UniTire 数据；
+- 未经有效域、坐标、轮胎侧和来源验证的 Magic Formula / UniTire 参数直接启用；
 - V0.1 中的坡度、横坡、路面空间变化与能耗计算。
 
-详细边界见 [`docs/project-scope.md`](docs/project-scope.md)，参考资产见 [`docs/reference-inventory.md`](docs/reference-inventory.md)。
+详细边界见 [`docs/project-scope.md`](docs/project-scope.md)，轮胎契约见 [`docs/tire_adapter.md`](docs/tire_adapter.md)，参考资产见 [`docs/reference-inventory.md`](docs/reference-inventory.md)。
