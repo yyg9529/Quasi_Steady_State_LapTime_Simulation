@@ -1,7 +1,9 @@
 function ggv = generate_model_ggv(vehicle, tire, aero, powertrain, brake, options)
-%GENERATE_MODEL_GGV Generate a V0.1 point-mass constant-mu GGV map.
-%   Acceleration fields are stored in g; speed uses m/s. Aerodynamic forces
-%   and axle load transfer are intentionally excluded from V0.1.
+%GENERATE_MODEL_GGV Generate a point-mass constant-mu GGV map.
+%   Acceleration fields are stored in g; speed uses m/s. V0.2 includes
+%   speed-dependent total downforce and aerodynamic drag. Wheel-load
+%   redistribution is available as a separately verified model but cannot
+%   change ideal constant-mu total grip by itself.
 
 arguments
     vehicle (1,1) struct
@@ -39,12 +41,20 @@ brakeLimiter = strings(nSpeed, nLateral);
 
 powertrain = fillPowertrainDefaults(powertrain, options);
 brake = fillBrakeDefaults(brake);
+aero = fillAeroDefaults(aero);
+ayLimitPos_g = zeros(nSpeed, 1);
+ayLimitNeg_g = zeros(nSpeed, 1);
 
 for iSpeed = 1:nSpeed
     speed_mps = vGrid_mps(iSpeed);
+    aeroForce = calc_aero_forces(speed_mps, aero);
+    normalLoadTotal_N = mass_kg * g_mps2 + aeroForce.downforce_total_N;
+    lateralLimit_g = tire.mu_y * normalLoadTotal_N / mass_kg / g_mps2;
+    ayLimitPos_g(iSpeed) = lateralLimit_g;
+    ayLimitNeg_g(iSpeed) = -lateralLimit_g;
     for iLateral = 1:nLateral
         ay_g = ayGrid_g(iLateral);
-        lateralRatio = abs(ay_g) / tire.mu_y;
+        lateralRatio = abs(ay_g) / lateralLimit_g;
         if lateralRatio > 1 + 10 * eps
             accelLimiter(iSpeed, iLateral) = "lateral_infeasible";
             brakeLimiter(iSpeed, iLateral) = "lateral_infeasible";
@@ -54,15 +64,17 @@ for iSpeed = 1:nSpeed
         feasible(iSpeed, iLateral) = true;
         longitudinalScale = max(0, 1 - lateralRatio^tire.combined_n) ...
             ^ (1 / tire.combined_n);
-        tireForce_N = tire.mu_x * mass_kg * g_mps2 * longitudinalScale;
+        tireForce_N = tire.mu_x * normalLoadTotal_N * longitudinalScale;
 
         [driveForce_N, driveLimiter] = pointMassDriveForce( ...
             speed_mps, tireForce_N, tire, powertrain, options);
         [brakeForce_N, thisBrakeLimiter] = pointMassBrakeForce( ...
             tireForce_N, mass_kg, brake, g_mps2);
 
-        axMax_g(iSpeed, iLateral) = driveForce_N / mass_kg / g_mps2;
-        axMin_g(iSpeed, iLateral) = -brakeForce_N / mass_kg / g_mps2;
+        axMax_g(iSpeed, iLateral) = (driveForce_N - aeroForce.drag_N) ...
+            / mass_kg / g_mps2;
+        axMin_g(iSpeed, iLateral) = (-brakeForce_N - aeroForce.drag_N) ...
+            / mass_kg / g_mps2;
         accelLimiter(iSpeed, iLateral) = driveLimiter;
         brakeLimiter(iSpeed, iLateral) = thisBrakeLimiter;
     end
@@ -73,15 +85,14 @@ ggv.ay_g = ayGrid_g;
 ggv.ax_max_g = axMax_g;
 ggv.ax_min_g = axMin_g;
 ggv.feasible = feasible;
-ggv.ay_limit_pos_g = tire.mu_y * ones(nSpeed, 1);
-ggv.ay_limit_neg_g = -tire.mu_y * ones(nSpeed, 1);
+ggv.ay_limit_pos_g = ayLimitPos_g;
+ggv.ay_limit_neg_g = ayLimitNeg_g;
 ggv.accel_limiter = accelLimiter;
 ggv.brake_limiter = brakeLimiter;
-ggv.source = "model_constant_mu_v0.1";
-ggv.notes = "Point-mass superellipse; no aero or load transfer";
+ggv.source = "model_constant_mu_v0.2";
+ggv.notes = "Point-mass superellipse with total aero load and drag";
 ggv.gravity_mps2 = g_mps2;
 ggv.options = options;
-ggv.aero_input_ignored = ~isempty(fieldnames(aero));
 end
 
 function validateBaselineInputs(vehicle, tire)
@@ -113,6 +124,16 @@ function model = fillBrakeDefaults(model)
 if ~isfield(model, "enabled"), model.enabled = true; end
 if ~isfield(model, "max_decel_g_mechanical")
     model.max_decel_g_mechanical = inf;
+end
+end
+
+function model = fillAeroDefaults(model)
+if ~isfield(model, "enabled"), model.enabled = false; end
+if ~isfield(model, "rho_kgpm3"), model.rho_kgpm3 = 1.225; end
+if ~isfield(model, "CDA_m2"), model.CDA_m2 = 0; end
+if ~isfield(model, "CLA_m2"), model.CLA_m2 = 0; end
+if ~isfield(model, "front_downforce_frac")
+    model.front_downforce_frac = 0.5;
 end
 end
 
