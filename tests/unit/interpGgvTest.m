@@ -29,7 +29,8 @@ classdef interpGgvTest < matlab.unittest.TestCase
             testCase.verifyEqual(cap.ax_max_mps2, ...
                 1.5 * testCase.Gravity, AbsTol=1e-12);
             testCase.verifyEqual(cap.ax_min_mps2, ...
-                -1.5 * testCase.Gravity, AbsTol=1e-12);
+                testCase.Ggv.ax_min_g(3, 5) * testCase.Gravity, ...
+                AbsTol=1e-12);
         end
 
         function testInteriorInterpolationIsFinite(testCase)

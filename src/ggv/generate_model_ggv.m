@@ -20,6 +20,7 @@ validateInputs(vehicle, tire, options);
 powertrain = fillPowertrainDefaults(powertrain, options);
 brake = fillBrakeDefaults(brake);
 aero = fillAeroDefaults(aero);
+validateDrivetrainConsistency(vehicle, powertrain);
 
 vGrid_mps = options.v_grid_mps(:);
 ayGrid_g = options.ay_grid_g(:).';
@@ -142,9 +143,21 @@ end
 function [ax_mps2, limiter, converged, residual_mps2, hasWheelLift] = ...
         solveLongitudinalBranch(branch, speed_mps, ay_g, vehicle, tire, ...
         aeroForce, powertrain, brake, options)
-axEstimate_mps2 = 0;
 hasWheelLift = false;
 converged = false;
+[minimumPitchAx_mps2, maximumPitchAx_mps2] = ...
+    pitchAccelerationBounds(vehicle, aeroForce, options.gravity_mps2);
+lowerBound_mps2 = max(minimumPitchAx_mps2, -5 * options.gravity_mps2);
+upperBound_mps2 = min(maximumPitchAx_mps2, 5 * options.gravity_mps2);
+
+previousAx_mps2 = clamp(0, lowerBound_mps2, upperBound_mps2);
+[previousCandidate_mps2, ~, previousLift] = branchAcceleration( ...
+    branch, previousAx_mps2, speed_mps, ay_g, vehicle, tire, ...
+    aeroForce, powertrain, brake, options);
+hasWheelLift = hasWheelLift || previousLift;
+previousResidual_mps2 = previousCandidate_mps2 - previousAx_mps2;
+axEstimate_mps2 = clamp(previousCandidate_mps2, ...
+    lowerBound_mps2, upperBound_mps2);
 
 for iIteration = 1:options.ggv_max_iterations
     [candidate_mps2, ~, thisWheelLift] = branchAcceleration( ...
@@ -153,12 +166,22 @@ for iIteration = 1:options.ggv_max_iterations
     hasWheelLift = hasWheelLift || thisWheelLift;
     residual_mps2 = candidate_mps2 - axEstimate_mps2;
     if abs(residual_mps2) <= options.ggv_tolerance_mps2
-        axEstimate_mps2 = candidate_mps2;
         converged = true;
         break
     end
-    axEstimate_mps2 = axEstimate_mps2 ...
-        + options.ggv_relaxation * residual_mps2;
+
+    residualDelta = residual_mps2 - previousResidual_mps2;
+    if abs(residualDelta) > 1e-12
+        nextAx_mps2 = axEstimate_mps2 - residual_mps2 ...
+            * (axEstimate_mps2 - previousAx_mps2) / residualDelta;
+    else
+        nextAx_mps2 = axEstimate_mps2 ...
+            + options.ggv_relaxation * residual_mps2;
+    end
+    previousAx_mps2 = axEstimate_mps2;
+    previousResidual_mps2 = residual_mps2;
+    axEstimate_mps2 = clamp(nextAx_mps2, ...
+        lowerBound_mps2, upperBound_mps2);
 end
 
 [candidate_mps2, limiter, thisWheelLift] = branchAcceleration( ...
@@ -193,22 +216,26 @@ else
 end
 availableFx_N = tire_combined_simple(env.Fx_max_N, env.Fy_max_N, ...
     FyDemand_N, tire.combined_n);
+loads.Fx_available_N = availableFx_N;
+loads.vehicle_mass_kg = vehicle.mass.total_kg;
 
 switch branch
     case "accel"
-        [tractiveForce_N, limiter] = idealDriveForce( ...
-            speed_mps, sum(availableFx_N), tire, powertrain, options);
-        candidate_mps2 = (tractiveForce_N - aeroForce.drag_N) ...
+        drive = calc_drive_limit( ...
+            speed_mps, loads, tire, powertrain, options);
+        limiter = drive.limiter;
+        candidate_mps2 = (drive.Fx_drive_max_N - aeroForce.drag_N) ...
             / vehicle.mass.total_kg;
         if candidate_mps2 > maximumPitchAx_mps2
             candidate_mps2 = maximumPitchAx_mps2;
             limiter = "front_axle_lift";
         end
     case "brake"
-        [brakingForce_N, limiter] = idealBrakeForce( ...
-            sum(availableFx_N), vehicle.mass.total_kg, brake, options);
-        candidate_mps2 = (-brakingForce_N - aeroForce.drag_N) ...
-            / vehicle.mass.total_kg;
+        brakeResult = calc_brake_limit( ...
+            speed_mps, loads, tire, brake, options);
+        limiter = brakeResult.limiter;
+        candidate_mps2 = brakeResult.ax_min_mps2 ...
+            - aeroForce.drag_N / vehicle.mass.total_kg;
         if candidate_mps2 < minimumPitchAx_mps2
             candidate_mps2 = minimumPitchAx_mps2;
             limiter = "rear_axle_lift";
@@ -235,41 +262,6 @@ scale = vehicle.geometry.wheelbase_m ...
     / (vehicle.mass.total_kg * height_m);
 maximumAx_mps2 = frontNormal_N * scale;
 minimumAx_mps2 = -rearNormal_N * scale;
-end
-
-function [force_N, limiter] = idealDriveForce( ...
-        speed_mps, tireForce_N, tire, powertrain, options)
-if ~powertrain.enabled
-    force_N = tireForce_N;
-    limiter = "tire";
-    return
-end
-if speed_mps >= powertrain.max_speed_mps
-    force_N = 0;
-    limiter = "top_speed";
-    return
-end
-
-torqueForce_N = powertrain.max_wheel_torque_Nm / tire.rolling_radius_m;
-powerForce_N = powertrain.max_power_W * powertrain.drive_efficiency ...
-    / max(speed_mps, options.min_query_speed_mps);
-[force_N, index] = min([tireForce_N, torqueForce_N, powerForce_N]);
-labels = ["traction", "torque", "power"];
-limiter = labels(index);
-end
-
-function [force_N, limiter] = idealBrakeForce( ...
-        tireForce_N, mass_kg, brake, options)
-if ~brake.enabled
-    force_N = 0;
-    limiter = "brake_disabled";
-    return
-end
-mechanicalForce_N = brake.max_decel_g_mechanical ...
-    * mass_kg * options.gravity_mps2;
-[force_N, index] = min([tireForce_N, mechanicalForce_N]);
-labels = ["brake_traction", "brake_mechanical"];
-limiter = labels(index);
 end
 
 function validateInputs(vehicle, tire, options)
@@ -301,9 +293,16 @@ end
 function model = fillPowertrainDefaults(model, options)
 if ~isfield(model, "enabled"), model.enabled = false; end
 if ~isfield(model, "max_power_W"), model.max_power_W = inf; end
-if ~isfield(model, "max_wheel_torque_Nm"), model.max_wheel_torque_Nm = inf; end
+if ~isfield(model, "max_total_wheel_torque_Nm")
+    if isfield(model, "max_wheel_torque_Nm")
+        model.max_total_wheel_torque_Nm = model.max_wheel_torque_Nm;
+    else
+        model.max_total_wheel_torque_Nm = inf;
+    end
+end
 if ~isfield(model, "max_speed_mps"), model.max_speed_mps = options.v_max_mps; end
 if ~isfield(model, "drive_efficiency"), model.drive_efficiency = 1; end
+if ~isfield(model, "layout"), model.layout = "AWD"; end
 end
 
 function model = fillBrakeDefaults(model)
@@ -320,5 +319,15 @@ if ~isfield(model, "CDA_m2"), model.CDA_m2 = 0; end
 if ~isfield(model, "CLA_m2"), model.CLA_m2 = 0; end
 if ~isfield(model, "front_downforce_frac")
     model.front_downforce_frac = 0.5;
+end
+end
+
+function validateDrivetrainConsistency(vehicle, powertrain)
+if powertrain.enabled && isfield(vehicle, "drivetrain") ...
+        && isfield(vehicle.drivetrain, "layout") ...
+        && upper(string(vehicle.drivetrain.layout)) ...
+        ~= upper(string(powertrain.layout))
+    error("QSSLTS:DrivetrainMismatch", ...
+        "vehicle.drivetrain.layout and powertrain.layout must agree.");
 end
 end

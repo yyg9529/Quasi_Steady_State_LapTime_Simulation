@@ -24,6 +24,10 @@ ggv.feasible    % Nv x Nay, lateral feasibility
 
 `models` 可包含 `tire`、`aero`、`powertrain`、`brake`、`ggv`、`ggv_real`、`suspension`。若没有 `models.ggv`，`run_qss_lap` 生成理论 GGV；若存在实车能力数据，只在车辆能力层校准。
 
+`powertrain.max_total_wheel_torque_Nm` 表示经过齿比后的所有驱动轮轮端扭矩总和，因此扭矩分支不再乘传动效率；`max_power_W` 视为效率前功率，功率分支乘 `drive_efficiency`。`powertrain.layout` 是动力模型的单一真源，并在生成 GGV 时与 `vehicle.drivetrain.layout` 校验一致。
+
+`brake.front_bias` 是总制动力需求的前轴比例。制动附着上限同时满足前轴和后轴容量，而不是简单使用四轮容量之和。`max_decel_g_mechanical` 是概念阶段的质量比例限制；质量 DOE 若需要固定硬件能力，应改用 `max_total_brake_force_N`。
+
 ## LapResult
 
 结果至少包含 `lap_time_s`、`s_m`、`v_mps`、`ax_mps2`、`ay_mps2`、`limiter`、`ggv_used`、`options`、逐段时间和求解收敛信息。
