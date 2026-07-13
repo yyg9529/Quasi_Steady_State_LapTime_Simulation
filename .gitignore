@@ -1,0 +1,23 @@
+# MATLAB generated files
+*.asv
+*.m~
+*.autosave
+*.slxc
+*.mex*
+slprj/
+sccprj/
+codegen/
+
+# Test and analysis outputs
+coverage/
+test-results/
+*.log
+
+# Local reference material
+reference/
+
+# Local editor and operating-system files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
