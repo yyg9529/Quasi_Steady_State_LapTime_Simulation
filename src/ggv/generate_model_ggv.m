@@ -301,6 +301,11 @@ end
 end
 
 function model = fillPowertrainDefaults(model, options)
+if isCompositePowertrain(model)
+    model = validate_powertrain_config(model);
+    return
+end
+
 if ~isfield(model, "enabled"), model.enabled = false; end
 if ~isfield(model, "max_power_W"), model.max_power_W = inf; end
 if ~isfield(model, "max_total_wheel_torque_Nm")
@@ -313,6 +318,12 @@ end
 if ~isfield(model, "max_speed_mps"), model.max_speed_mps = options.v_max_mps; end
 if ~isfield(model, "drive_efficiency"), model.drive_efficiency = 1; end
 if ~isfield(model, "layout"), model.layout = "AWD"; end
+end
+
+function result = isCompositePowertrain(model)
+markers = ["motor_count", "gear_ratio", "drivetrain_efficiency", ...
+    "motor", "battery", "inverter", "rules"];
+result = any(isfield(model, cellstr(markers)));
 end
 
 function model = fillBrakeDefaults(model)

@@ -15,7 +15,41 @@ end
 
 options = default_qss_options(options);
 availableFx_N = getAvailableLongitudinalForce(loads, tire);
-powertrain = fillDefaults(powertrain, options);
+
+if isCompositePowertrain(powertrain)
+    powertrain = validate_powertrain_config(powertrain);
+    if ~powertrain.enabled
+        drive.Fx_drive_max_N = sum(availableFx_N);
+        drive.limiter = "tire";
+        drive.traction_limit_N = drive.Fx_drive_max_N;
+        drive.torque_limit_N = inf;
+        drive.power_limit_N = inf;
+        return
+    end
+
+    drivenIndices = drivenWheelIndices(powertrain.layout);
+    tractionLimit_N = sum(availableFx_N(drivenIndices));
+    capability = evaluate_powertrain_constraints( ...
+        v_mps, tire, powertrain, powertrain.battery.V_bus_assumed_V);
+    powertrainForceLimit_N = capability.available_wheel_force_N;
+    if powertrainForceLimit_N <= tractionLimit_N
+        force_N = powertrainForceLimit_N;
+        limiter = capability.limiter;
+    else
+        force_N = tractionLimit_N;
+        limiter = "traction";
+    end
+
+    drive.Fx_drive_max_N = force_N;
+    drive.limiter = limiter;
+    drive.traction_limit_N = tractionLimit_N;
+    drive.powertrain_force_limit_N = powertrainForceLimit_N;
+    drive.driven_wheel_indices = drivenIndices;
+    drive.powertrain = capability;
+    return
+end
+
+powertrain = fillLegacyDefaults(powertrain, options);
 
 if ~powertrain.enabled
     drive.Fx_drive_max_N = sum(availableFx_N);
@@ -86,7 +120,7 @@ switch upper(string(layout))
 end
 end
 
-function model = fillDefaults(model, options)
+function model = fillLegacyDefaults(model, options)
 if ~isfield(model, "enabled"), model.enabled = false; end
 if ~isfield(model, "layout"), model.layout = "AWD"; end
 if ~isfield(model, "max_total_wheel_torque_Nm")
@@ -107,4 +141,10 @@ if model.max_total_wheel_torque_Nm < 0 || model.max_power_W < 0 ...
     error("QSSLTS:PowertrainParameters", ...
         "Powertrain limits/efficiency are outside valid bounds.");
 end
+end
+
+function result = isCompositePowertrain(model)
+markers = ["motor_count", "gear_ratio", "drivetrain_efficiency", ...
+    "motor", "battery", "inverter", "rules"];
+result = any(isfield(model, cellstr(markers)));
 end
