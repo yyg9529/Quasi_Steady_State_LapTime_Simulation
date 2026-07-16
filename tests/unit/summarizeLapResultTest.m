@@ -26,5 +26,24 @@ classdef summarizeLapResultTest < matlab.unittest.TestCase
             testCase.verifyEqual(summary.max_brake_g, 1, AbsTol=1e-12);
             testCase.verifyEqual(summary.max_ay_g, 2, AbsTol=1e-12);
         end
+
+        function testCompositePowertrainLimitersRemainDistanceWeighted(testCase)
+            result.options.gravity_mps2 = 10;
+            result.track.ds_m = [3; 1];
+            result.limiter = ["rule_power"; "brake"];
+            result.lap_time_s = 1;
+            result.v_mps = [10; 10];
+            result.ax_mps2 = [1; -1];
+            result.ay_mps2 = [0; 0];
+
+            summary = summarize_lap_result(result);
+
+            testCase.verifyEqual(summary.percent_power_limited, 75, ...
+                AbsTol=1e-12);
+            testCase.verifyEqual(summary.percent_brake_limited, 25, ...
+                AbsTol=1e-12);
+            testCase.verifyEqual(summary.limiter_table.limiter, ...
+                ["rule_power"; "brake"]);
+        end
     end
 end

@@ -2,8 +2,9 @@
 
 ## 范围
 
-本提交新增独立的电驱约束内核和 concept demo，不修改现有
-`calc_drive_limit`、GGV、7DOF、DOE 或圈速积分链路。新旧动力接口不互设别名；后续集成必须显式适配。
+组合电驱接口已经接入 `calc_drive_limit`、模型 GGV 与圈速积分链路。
+旧的扁平动力接口暂时保留给尚未迁移的 legacy/DOE 调用；新旧接口不互设别名，
+组合配置不完整时直接报错，不回退到旧模型。
 
 V1 仅支持 `motor_count=1`，其他值抛出
 `QSSLTS:PowertrainMotorCount`。齿比定义为
@@ -206,7 +207,9 @@ motor_speed > motor_voltage > motor_power > motor_torque >
 traction > coasting > unconstrained
 ```
 
-当前独立内核只产生动力内部候选；`lateral/brake/traction/top_speed` 由后续集成层提供。
+圈速集成按实际节点 `v/ax/ay` 重算轮载、combined-slip 轮胎能力和动力能力；
+`lateral/brake/traction/top_speed` 由该集成层与 GGV 边界共同判定。内点负加速度
+只有贴合 `ax_min` 时才是 `brake`，不能按加速度符号直接分类。
 
 功率结果必须区分 capability 与 usage。每个节点至少记录：电机转速、可用/已用电机扭矩、可用/已用轮端力、TSAC 功率上限/实际使用、各 DC 电流、各 phase Arms、
 `V_bus`、`voltage_scenario`、`thermal_feasibility_evaluated=false` 和
@@ -216,10 +219,43 @@ traction > coasting > unconstrained
 
 ## 能量与耐久契约
 
-能量层按段记录 `segment_energy_Wh`，累计量为 `N_segment+1` 个值且首项为
-0。任务标量至少包括总使用能量、可用能量、剩余能量、结束 SOC、耐久需求能量、
-1.10 safety 后需求以及可行性。回生关闭时回生能量必须为 0，不得从制动段虚构负能耗。
+节点级 `result.powertrain` 是能力/使用量快照；能量账本使用相邻节点重构的分段量。
+闭合赛道有 `N` 段并显式包含 `N→1`，开放赛道有 `N-1` 段。分段加速度与均速为：
+
+```text
+ax_segment = (v_next^2 - v_start^2) / (2*ds)
+v_mean = 0.5 * (v_start + v_next)
+```
+
+当前没有滚阻模型，因此 `F_rolling=0`。驱动力取
+`max(m*ax_segment + F_drag, 0)`；回生关闭，制动段不会形成负能耗。
+TSAC 功率按传动、逆变器和电机常效率链换算，并在每一段加入辅助功率。
+辅助功率计入 TSAC 与电池侧 DC 功率/电流，不计入逆变器 DC 电流、
+电机/逆变器 phase Arms、轮端力或电机扭矩。
+模型采用固定 DC 母线电压、常数效率、无回生、无热状态；
+`battery.eta_discharge` 仅将 TSAC 能量换算为电池储能消耗。
+
+段与累计字段严格为：
+
+```text
+segment_energy_ts_kWh, segment_energy_stored_kWh
+cumulative_energy_ts_kWh, cumulative_energy_stored_kWh
+```
+
+累计数组长度为 `N_segment+1` 且首项为 0。标量输出为
+`E_lap_ts_kWh`、`E_lap_stored_kWh`、`E_endurance_stored_kWh`、
+`E_nominal_required_kWh`、`SOC_end_estimated` 和
+`can_finish_endurance_estimated`。耐久储能需求等于单圈储能消耗乘圈数和安全系数；
+这里假定每圈都重复同一个已求得的最小圈速剖面，不模拟圈间 SOC、温度或性能变化。
+标称容量需求再除以 `SOC_init-SOC_min`。结束 SOC 由耐久储能需求除以标称容量估算，
+可行性判定在 `SOC_min` 边界使用浮点容差。
 
 `models.endurance` 与 powertrain 独立。D7.1.3 规定完整耐久约 22 km。
 冻结的真实赛道换算结果为 `ceil(...)=26` 圈；本提交只记录任务书给定结果，未读取或运行真实赛道。
 `safety_factor=1.10` 是工程假设，不是规则值。
+
+`endurance_energy_feasible`、`thermal_feasibility_evaluated`、
+`regen_enabled` 和 `voltage_scenario` 是全局状态，不属于点级 limiter。
+对外提供的预生成 GGV 若启用组合动力，必须带有匹配的动力和轮胎 provenance；
+当前 GGV 未保存完整气动参数 provenance，因此启用气动的预生成 GGV 被保守拒绝，
+应由当前输入现场重新生成。

@@ -12,7 +12,16 @@ end
 options = default_qss_options(options);
 validateTrack(track);
 
-if isfield(models, "ggv") && ~isempty(models.ggv)
+[hasCompositePowertrain, hasEnabledCompositePowertrain, ...
+    compositePowertrain] = compositePowertrainState(models);
+hasPrebuiltGgv = isfield(models, "ggv") && ~isempty(models.ggv);
+if hasCompositePowertrain && hasPrebuiltGgv
+    validatePrebuiltPowertrainGgv(models.ggv, vehicle, ...
+        requireModel(models, "tire"), optionalModel(models, "aero"), ...
+        compositePowertrain, optionalModel(models, "brake"), options);
+end
+
+if hasPrebuiltGgv
     ggv = models.ggv;
 else
     ggv = generate_model_ggv(vehicle, requireModel(models, "tire"), ...
@@ -57,6 +66,25 @@ limiter = classifyLimiters(profile_mps, vLat_mps, ...
 [lapTime_s, segmentTime_s, cumulativeTime_s] = ...
     integrate_lap_time(track, profile_mps);
 
+powertrainResult = struct();
+energy = struct();
+activeConstraints = struct();
+if hasEnabledCompositePowertrain
+    tire = requireModel(models, "tire");
+    aero = optionalModel(models, "aero");
+    endurance = requireModel(models, "endurance");
+    powertrainResult = evaluate_lap_powertrain(track, profile_mps, ...
+        ax_mps2, ay_mps2, vehicle, tire, aero, ...
+        compositePowertrain, options);
+    energy = calc_lap_energy(track, profile_mps, vehicle, aero, ...
+        compositePowertrain, endurance);
+    [activeConstraints, limiter] = classify_active_constraints( ...
+        profile_mps, ax_mps2, ay_mps2, vLat_mps, lateralLimiter, ...
+        ggv, powertrainResult, options);
+    powertrainResult.endurance_energy_feasible = ...
+        energy.can_finish_endurance_estimated;
+end
+
 result.lap_time_s = lapTime_s;
 result.s_m = track.s_m(:);
 result.v_mps = profile_mps;
@@ -73,6 +101,11 @@ result.calibration_report = calibrationReport;
 result.solver.converged = converged;
 result.solver.iterations = iIteration;
 result.solver.max_change_mps = maxChange_mps;
+if hasEnabledCompositePowertrain
+    result.powertrain = powertrainResult;
+    result.energy = energy;
+    result.active_constraints = activeConstraints;
+end
 end
 
 function [ax_mps2, ay_mps2] = reconstructAcceleration(track, v_mps)
@@ -138,6 +171,143 @@ if isfield(models, name)
 else
     model = struct();
 end
+end
+
+function [present, enabled, powertrain] = compositePowertrainState(models)
+present = false;
+enabled = false;
+powertrain = struct();
+if ~isfield(models, "powertrain") || isempty(models.powertrain) ...
+        || ~isCompositePowertrain(models.powertrain)
+    return
+end
+present = true;
+powertrain = validate_powertrain_config(models.powertrain);
+enabled = logical(powertrain.enabled);
+end
+
+function result = isCompositePowertrain(powertrain)
+markers = ["motor_count", "gear_ratio", "drivetrain_efficiency", ...
+    "motor", "battery", "inverter", "rules"];
+result = any(isfield(powertrain, cellstr(markers)));
+end
+
+function validatePrebuiltPowertrainGgv( ...
+        ggv, vehicle, tire, aero, powertrain, brake, options)
+try
+    validProvenance = isfield(ggv, "provenance") ...
+        && isstruct(ggv.provenance) ...
+        && isscalar(ggv.provenance) ...
+        && isfield(ggv.provenance, "vehicle") ...
+        && isfield(ggv.provenance, "powertrain") ...
+        && isfield(ggv.provenance, "tire") ...
+        && isfield(ggv.provenance, "brake") ...
+        && isfield(ggv, "options") ...
+        && sameStruct(vehicleSignature(ggv.provenance.vehicle), ...
+            vehicleSignature(vehicle)) ...
+        && sameStruct(powertrainSignature(ggv.provenance.powertrain), ...
+            powertrainSignature(powertrain)) ...
+        && sameStruct(ggv.provenance.tire, ...
+            tire_envelope_provenance(tire)) ...
+        && sameStruct(normalizeBrake(ggv.provenance.brake), ...
+            normalizeBrake(brake)) ...
+        && sameStruct(generationOptionsSignature(ggv.options), ...
+            generationOptionsSignature(options));
+catch
+    error("QSSLTS:PowertrainGGVProvenance", ...
+        "Composite powertrain prebuilt GGV provenance is invalid.");
+end
+isAeroDisabled = isfield(ggv, "aero_enabled") ...
+    && isscalar(ggv.aero_enabled) && ~logical(ggv.aero_enabled) ...
+    && (~isfield(aero, "enabled") || ~logical(aero.enabled));
+if ~validProvenance || ~isAeroDisabled
+    error("QSSLTS:PowertrainGGVProvenance", ...
+        "Composite powertrain prebuilt GGV provenance is invalid.");
+end
+end
+
+function signature = vehicleSignature(vehicle)
+signature.mass = selectFields(vehicle.mass, [ ...
+    "total_kg", "front_static_frac", "cg_height_m"]);
+signature.geometry = selectFields(vehicle.geometry, [ ...
+    "wheelbase_m", "track_front_m", "track_rear_m"]);
+signature.load_transfer = selectFields(vehicle.load_transfer, ...
+    "front_lateral_distribution");
+signature.drivetrain = selectFields(vehicle.drivetrain, "layout");
+signature.drivetrain.layout = ...
+    upper(string(signature.drivetrain.layout));
+end
+
+function signature = powertrainSignature(powertrain)
+try
+    powertrain = validate_powertrain_config(powertrain);
+catch
+    error("QSSLTS:PowertrainGGVProvenance", ...
+        "Prebuilt GGV powertrain provenance is incomplete or invalid.");
+end
+signature.enabled = logical(powertrain.enabled);
+signature.motor_count = powertrain.motor_count;
+signature.layout = upper(string(powertrain.layout));
+signature.gear_ratio = powertrain.gear_ratio;
+signature.drivetrain_efficiency = powertrain.drivetrain_efficiency;
+signature.motor = selectFields(powertrain.motor, [ ...
+    "max_mechanical_speed_rpm", "physical_peak_power_W", ...
+    "physical_peak_power_rpm", "physical_cont_power_W", ...
+    "peak_torque_Nm", "cont_torque_Nm", ...
+    "required_voltage_peak_power_V", "peak_phase_current_Arms", ...
+    "cont_phase_current_Arms", "Kv_no_load_rpm_per_V", ...
+    "Kv_nominal_load_rpm_per_V", "Kv_peak_load_rpm_per_V", ...
+    "Kt_Nm_per_Arms", "eta_const", "thermal_model_enabled"]);
+signature.battery = selectFields(powertrain.battery, [ ...
+    "V_max_V", "V_nominal_V", "V_min_V", "V_bus_assumed_V", ...
+    "E_nominal_kWh", "SOC_init", "SOC_min", ...
+    "P_discharge_peak_W", "I_discharge_peak_A", ...
+    "eta_discharge", "P_ts_aux_W"]);
+signature.inverter = selectFields(powertrain.inverter, [ ...
+    "V_dc_max_V", "P_dc_peak_W", "I_dc_peak_A", ...
+    "I_phase_peak_Arms", "eta_const"]);
+signature.rules = selectFields(powertrain.rules, [ ...
+    "max_ts_voltage_V", "max_ts_power_W", "max_ts_current_A", ...
+    "regen_enabled_in_model"]);
+end
+
+function brake = normalizeBrake(brake)
+if ~isfield(brake, "enabled"), brake.enabled = true; end
+if ~isfield(brake, "front_bias"), brake.front_bias = 0.5; end
+if ~isfield(brake, "max_decel_g_mechanical")
+    brake.max_decel_g_mechanical = inf;
+end
+if ~isfield(brake, "max_total_brake_force_N")
+    brake.max_total_brake_force_N = inf;
+end
+if ~isfield(brake, "max_total_brake_torque_Nm")
+    brake.max_total_brake_torque_Nm = inf;
+end
+end
+
+function signature = generationOptionsSignature(options)
+signature = selectFields(options, ["gravity_mps2", "v_grid_mps", ...
+    "ay_grid_g", "ggv_max_iterations", "ggv_tolerance_mps2", ...
+    "ggv_relaxation"]);
+signature.v_grid_mps = signature.v_grid_mps(:);
+signature.ay_grid_g = signature.ay_grid_g(:).';
+end
+
+function selected = selectFields(value, names)
+selected = struct();
+for index = 1:numel(names)
+    name = names(index);
+    selected.(name) = value.(name);
+end
+end
+
+function result = sameStruct(left, right)
+if ~isstruct(left) || ~isscalar(left) || ~isstruct(right) ...
+        || ~isscalar(right)
+    result = false;
+    return
+end
+result = isequaln(orderfields(left), orderfields(right));
 end
 
 function validateTrack(track)
