@@ -43,7 +43,7 @@ drivetrain_efficiency, motor, battery, inverter, rules
 
 ## GGV 与耐久输入
 
-`options.v_grid_mps` 与 `options.ay_grid_g` 定义 GGV 网格。未提供预建 GGV 时，`generate_model_ggv` 在各 `(v, Ay)` 网格点调用动力、轮胎和制动内核；前后向传播随后以节点 `actual Ay_mps2=v^2*kappa`（m/s²）重建横向加速度，并在调用 `interp_ggv` 前除以 `gravity_mps2` 转成 g，因此弯中 Ax 能力不是直线能力。
+`options.v_grid_mps` 与 `options.ay_grid_g` 定义 GGV 网格。未提供预建 GGV 时，`generate_model_ggv` 在各 `(v, Ay)` 网格点调用动力、轮胎和制动内核；前后向传播随后以节点 `actual Ay_mps2=v^2*kappa`（m/s²）重建横向加速度，并在调用 `interp_ggv` 前除以 `gravity_mps2` 转成 g，因此弯中 Ax 能力不是直线能力。前向加速段对入口和段中代表速度重复该查询，并迭代候选出口速度至分段可达；组合动力配置还在段中状态直接重算固定电压 TSAC 功率/电流上限，避免 GGV 速度网格插值的非保守误差。闭环同样处理 `N→1` 段。
 
 `models.endurance` 独立于 `models.powertrain`，接口为正整数 `num_laps` 和不小于 1 的 `safety_factor`。它只在速度剖面收敛后的能量后处理中使用，不进入 GGV。
 
@@ -95,7 +95,7 @@ TSAC、电池和逆变器的母线电流是 DC A；电机/逆变器相电流是 
 
 ## `result.energy`
 
-精确段字段为 `segment_ax_mps2, segment_speed_mean_mps, segment_drive_force_N, segment_wheel_power_W, segment_tsac_power_W, segment_energy_ts_kWh, segment_energy_stored_kWh`。`cumulative_energy_ts_kWh` 与 `cumulative_energy_stored_kWh` 长度均为 `Nsegment+1`，首项固定为 0。汇总字段为：
+精确段字段为 `segment_ax_mps2, segment_speed_mean_mps, segment_drive_force_N, segment_wheel_power_W, segment_tsac_power_W, segment_tsac_power_cap_W, segment_tsac_power_margin_W, segment_energy_ts_kWh, segment_energy_stored_kWh`。功率裕量严格定义为 `segment_tsac_power_cap_W-segment_tsac_power_W`；允许的负值只限冻结数值容差 `max(1 W, 1e-5*cap)`。`cumulative_energy_ts_kWh` 与 `cumulative_energy_stored_kWh` 长度均为 `Nsegment+1`，首项固定为 0。汇总字段为：
 
 ```text
 E_lap_ts_kWh, E_lap_stored_kWh, E_endurance_stored_kWh,

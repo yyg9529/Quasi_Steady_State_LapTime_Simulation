@@ -15,6 +15,8 @@
 - Sensitivity/DOE：直接扫描 `inverter_power_W` 和 `gear_ratio`，不得修改 `rules.*`。
 - 结果后处理：赛道速度图、动力/能量图、GGV 曲面图。
 - `s_m,x_m,y_m,curvature_1_m,track_width_m` 真实 geometry CSV 的精确弧长闭环读取；真实文件保持 local-untracked，`reference/` 保持本地 Git ignored。
+- 2026 车辆预设已确认轴距 `1.560 m`；其他继承车辆参数仍为 provisional。
+- Hoosier PAC2002 只在离线预处理中降阶为当前 QSS 轮胎包络，不把完整 MF-Tyre 引入运行时。
 
 ## 明确不在范围内
 
@@ -27,6 +29,7 @@
 - 在线调用 Simscape 或让悬架 lookup 直接改变 GGV；
 - 原始实车日志自动识别 GGV；
 - 经试验标定后可用于实车绝对预测的高保真模型。
+- 在有效滚动半径、传动比/目标车速和制动 Excel 未冻结前生成“2026 最终实车”结果。
 
 ## 冻结假设
 

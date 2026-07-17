@@ -21,11 +21,12 @@ track CSV + presets + options
             +--> result-only plots / Sensitivity/DOE
 ```
 
-`run_qss_lap` 是固定赛线主编排器。若没有预建 GGV，它调用 `generate_model_ggv`；前向和后向传播均以当前节点速度和曲率重建 `actual Ay = v^2*kappa`，并在该 Ay 处查询纵向加速或制动能力。组合动力系统下，GGV 和圈速后处理使用同一冻结配置，避免动力参数与预建图 provenance 不一致。
+`run_qss_lap` 是固定赛线主编排器。若没有预建 GGV，它调用 `generate_model_ggv`；前向和后向传播均以当前节点速度和曲率重建 `actual Ay = v^2*kappa`，并在该 Ay 处查询纵向加速或制动能力。前向加速段对入口和段中代表状态执行隐式可达性修正，避免把入口功率能力外推到整段；组合动力系统同时把段中固定电压功率上限作为内部可达性约束传入，后向制动传播保持原接口。GGV 和圈速后处理使用同一冻结配置，避免动力参数与预建图 provenance 不一致。
 
 ## 模块职责
 
 - `preprocessing/track`：赛道输入，负责 schema、单位、闭环弧长与 provenance。
+- `preprocessing/tire`：只做 PAC2002 标量解析与 QSS 离线降阶；生产求解器不读取 `reference/`。
 - `src/vehicle`、`src/tire`、`src/aero`：车辆状态、四轮载荷、轮胎包络和气动力。
 - `src/powertrain`：组合动力配置校验、600 V 电机包络、电池/逆变器/规则候选约束、逐点使用量和能量。
 - `src/ggv`：在速度/横向加速度网格上生成或插值 GGV；`plot_ggv_surface` 只消费 result。

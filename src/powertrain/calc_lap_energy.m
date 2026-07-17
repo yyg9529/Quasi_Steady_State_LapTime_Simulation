@@ -43,6 +43,11 @@ efficiency = powertrain.drivetrain_efficiency ...
     * powertrain.inverter.eta_const * powertrain.motor.eta_const;
 segmentTsacPower_W = segmentWheelPower_W / efficiency ...
     + powertrain.battery.P_ts_aux_W;
+busVoltage_V = repmat(powertrain.battery.V_bus_assumed_V, ...
+    numel(segmentTsacPower_W), 1);
+segmentPowerCap = calc_ts_power_cap(busVoltage_V, powertrain);
+segmentTsacPowerCap_W = segmentPowerCap.tsac_power_cap_W;
+segmentTsacPowerMargin_W = segmentTsacPowerCap_W - segmentTsacPower_W;
 segmentTime_s = ds_m ./ segmentSpeedMean_mps;
 segmentEnergyTs_kWh = segmentTsacPower_W .* segmentTime_s / 3.6e6;
 segmentEnergyStored_kWh = segmentEnergyTs_kWh ...
@@ -62,6 +67,8 @@ energy.segment_speed_mean_mps = segmentSpeedMean_mps;
 energy.segment_drive_force_N = segmentDriveForce_N;
 energy.segment_wheel_power_W = segmentWheelPower_W;
 energy.segment_tsac_power_W = segmentTsacPower_W;
+energy.segment_tsac_power_cap_W = segmentTsacPowerCap_W;
+energy.segment_tsac_power_margin_W = segmentTsacPowerMargin_W;
 energy.segment_energy_ts_kWh = segmentEnergyTs_kWh;
 energy.segment_energy_stored_kWh = segmentEnergyStored_kWh;
 energy.cumulative_energy_ts_kWh = [0; cumsum(segmentEnergyTs_kWh)];

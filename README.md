@@ -26,6 +26,8 @@ run(fullfile(projectRoot, "examples", ...
 
 规则基线是 Formula Student Rules 2026 v1.1 的 600 V、80 kW、正向 +500 A 限制；EMRAX 数据表点为 `104 kW@4500 rpm` 且约需 830 V，故正式示例在 600 V 下采用文档所述的保守降额包络。
 
+2026 实车输入目前只确认轴距 `1.560 m`，见 [FS 2026 车辆输入](docs/fs_2026_vehicle_inputs.md)。Hoosier PAC2002 文件只用于离线降阶；有效滚动半径、目标最高车速、实车传动比和制动计算表尚未确认，因此当前正式入口仍是概念基准，不能解释为 2026 最终实车结果。
+
 ## 结果与可视化
 
 核心结果包括：
@@ -34,6 +36,8 @@ run(fullfile(projectRoot, "examples", ...
 - `result.limiter` 和可多重激活的 `result.active_constraints`；
 - `result.powertrain` 的电机、轮端、TSAC、电池和逆变器逐点量；
 - `result.energy` 的单圈能量、重复圈耐久估计、SOC 与容量可行性。
+
+速度传播在加速段同时检查入口与段中代表状态能力。节点与分段 TSAC 功率必须满足 `used <= cap + max(1 W, 1e-5*cap)`；分段结果同时返回功率上限和功率裕量，不能用后处理截断掩盖不可行速度剖面。
 
 三个绘图 API 只接受求解结果，不重新计算模型：
 

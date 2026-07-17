@@ -42,6 +42,11 @@ for iIteration = 1:options.solver_max_iterations
     previous_mps = profile_mps;
     passOptions = options;
     passOptions.initial_profile_mps = profile_mps;
+    if hasEnabledCompositePowertrain
+        passOptions.segment_power_constraint = ...
+            makeSegmentPowerConstraint(vehicle, ...
+            optionalModel(models, "aero"), compositePowertrain);
+    end
     [vForward_mps, ~, forwardInfo] = forward_pass( ...
         track, ggv, vLat_mps, passOptions);
     [profile_mps, ~, backwardInfo] = backward_pass( ...
@@ -106,6 +111,12 @@ if hasEnabledCompositePowertrain
     result.energy = energy;
     result.active_constraints = activeConstraints;
 end
+end
+
+function constraint = makeSegmentPowerConstraint(vehicle, aero, powertrain)
+constraint.vehicle_mass_kg = vehicle.mass.total_kg;
+constraint.aero = aero;
+constraint.powertrain = powertrain;
 end
 
 function [ax_mps2, ay_mps2] = reconstructAcceleration(track, v_mps)

@@ -56,15 +56,125 @@ cap = interp_ggv(ggv, speed_mps, ay_g, options);
 if cap.is_feasible
     reachableSquared = speed_mps^2 + ...
         2 * cap.ax_max_mps2 * track.ds_m(iPoint);
-    reachable_mps = sqrt(max(0, reachableSquared));
+    explicitReachable_mps = sqrt(max(0, reachableSquared));
+    candidate_mps = min(profile_mps(nextPoint), explicitReachable_mps);
+    [isReachable, segmentLimiter] = segmentIsReachable( ...
+        speed_mps, candidate_mps, track.ds_m(iPoint), ...
+        track.kappa_1pm(iPoint), ggv, options);
+    if isReachable
+        reachable_mps = candidate_mps;
+    else
+        [reachable_mps, segmentLimiter] = solveReachableSpeed( ...
+            speed_mps, candidate_mps, track.ds_m(iPoint), ...
+            track.kappa_1pm(iPoint), ggv, options);
+    end
 else
     reachable_mps = 0;
+    segmentLimiter = cap.accel_limiter;
 end
 
 if reachable_mps < profile_mps(nextPoint)
     profile_mps(nextPoint) = reachable_mps;
-    limiter(nextPoint) = cap.accel_limiter;
+    limiter(nextPoint) = segmentLimiter;
 end
+end
+
+function [reachable_mps, limiter] = solveReachableSpeed( ...
+        startSpeed_mps, upperSpeed_mps, ds_m, kappa_1pm, ggv, options)
+candidate_mps = upperSpeed_mps;
+lowerSpeed_mps = 0;
+upperInfeasible_mps = upperSpeed_mps;
+for iIteration = 1:min(options.solver_max_iterations, 20)
+    [isReachable, limiter, limitingAx_mps2] = segmentIsReachable( ...
+        startSpeed_mps, candidate_mps, ds_m, kappa_1pm, ggv, options);
+    if isReachable
+        lowerSpeed_mps = candidate_mps;
+        break
+    end
+    upperInfeasible_mps = candidate_mps;
+    if ~isfinite(limitingAx_mps2)
+        break
+    end
+    revisedSquared = startSpeed_mps^2 ...
+        + 2 * limitingAx_mps2 * ds_m;
+    revised_mps = min(candidate_mps, sqrt(max(0, revisedSquared)));
+    if candidate_mps - revised_mps <= options.solver_tolerance_mps
+        break
+    end
+    candidate_mps = revised_mps;
+end
+
+for iIteration = 1:options.solver_max_iterations
+    candidate_mps = 0.5 * (lowerSpeed_mps + upperInfeasible_mps);
+    [isReachable, candidateLimiter] = segmentIsReachable( ...
+        startSpeed_mps, candidate_mps, ds_m, kappa_1pm, ggv, options);
+    if isReachable
+        lowerSpeed_mps = candidate_mps;
+    else
+        upperInfeasible_mps = candidate_mps;
+        limiter = candidateLimiter;
+    end
+    if upperInfeasible_mps - lowerSpeed_mps ...
+            <= options.solver_tolerance_mps
+        break
+    end
+end
+reachable_mps = lowerSpeed_mps;
+end
+
+function [isReachable, limiter, limitingAx_mps2] = segmentIsReachable( ...
+        startSpeed_mps, endSpeed_mps, ds_m, kappa_1pm, ggv, options)
+representativeSpeeds_mps = [startSpeed_mps; ...
+    0.5 * (startSpeed_mps + endSpeed_mps)];
+nState = numel(representativeSpeeds_mps);
+availableAx_mps2 = nan(nState, 1);
+limiters = strings(nState, 1);
+isFeasible = false(nState, 1);
+for iState = 1:nState
+    speed_mps = representativeSpeeds_mps(iState);
+    ay_g = speed_mps^2 * kappa_1pm / options.gravity_mps2;
+    cap = interp_ggv(ggv, speed_mps, ay_g, options);
+    availableAx_mps2(iState) = cap.ax_max_mps2;
+    limiters(iState) = cap.accel_limiter;
+    isFeasible(iState) = cap.is_feasible;
+end
+[limitingAx_mps2, limitingIndex] = min(availableAx_mps2);
+if isfield(options, "segment_power_constraint")
+    [powerAxLimit_mps2, powerLimiter] = segmentPowerAxLimit( ...
+        representativeSpeeds_mps(end), options.segment_power_constraint);
+    if powerAxLimit_mps2 < limitingAx_mps2
+        limitingAx_mps2 = powerAxLimit_mps2;
+        limiter = powerLimiter;
+    else
+        limiter = limiters(limitingIndex);
+    end
+else
+    limiter = limiters(limitingIndex);
+end
+requiredAx_mps2 = (endSpeed_mps^2 - startSpeed_mps^2) / (2 * ds_m);
+isReachable = all(isFeasible) ...
+    && requiredAx_mps2 <= limitingAx_mps2 ...
+    + options.accel_tolerance_mps2;
+end
+
+function [axLimit_mps2, limiter] = segmentPowerAxLimit( ...
+        speed_mps, constraint)
+powertrain = constraint.powertrain;
+powerCap = calc_ts_power_cap( ...
+    powertrain.battery.V_bus_assumed_V, powertrain);
+efficiency = powertrain.drivetrain_efficiency ...
+    * powertrain.inverter.eta_const * powertrain.motor.eta_const;
+mechanicalPowerCap_W = max(powerCap.tsac_power_cap_W ...
+    - powertrain.battery.P_ts_aux_W, 0) * efficiency;
+if speed_mps <= 0
+    axLimit_mps2 = inf;
+else
+    aeroForce = calc_aero_forces(speed_mps, constraint.aero);
+    wheelForceCap_N = mechanicalPowerCap_W / speed_mps;
+    axLimit_mps2 = (wheelForceCap_N - aeroForce.drag_N) ...
+        / constraint.vehicle_mass_kg;
+end
+limiter = powerCap.limiter;
 end
 
 function profile_mps = initialProfile(vLat_mps, options)

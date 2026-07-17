@@ -51,6 +51,8 @@ P_inverter_in_cap = max(P_TSAC_cap-P_ts_aux, 0)
 P_motor_mechanical_cap = P_inverter_in_cap*eta_inverter*eta_motor
 ```
 
+前向传播不再把入口 `Ax` 当作整段恒定可用能力。候选出口速度按入口和段中平均速度查询 GGV，每个查询都保持 `actual Ay=v^2*kappa`；组合动力配置还在段中状态用同一固定母线电压、效率和 `calc_ts_power_cap` 直接重算可用 `Ax`，消除 1 m/s GGV 速度网格在线性插值功率曲线时的非保守误差。若所需分段加速度超过任一状态能力，则迭代降低出口速度。该约束发生在速度剖面求解层，节点/分段功率结果没有使用 `min(used,cap)` 截断。
+
 电池 `eta_discharge` 只用于从 TSAC 能量换算储能侧能量，不再乘进瞬时驱动力链。轮端关系为：
 
 ```text
@@ -88,6 +90,22 @@ E_lap_stored = sum(E_segment_stored)
 E_endurance_stored = E_lap_stored * num_laps * safety_factor
 E_nominal_required = E_endurance_stored / (SOC_init-SOC_min)
 ```
+
+每段还输出 `segment_tsac_power_cap_W` 和 `segment_tsac_power_margin_W=cap-used`。功率验收容差冻结为 `max(1 W,1e-5*cap)`；这只吸收浮点误差，不能接受原先约 48 W 节点超限或 3.04 kW 分段超限。
+
+## P1 旧参数数值基线
+
+使用同一概念车辆/轮胎/制动/EMRAX-HVCC 参数和本地 Tianji 闭合赛道，仅改变分段可达性离散，R2026a 结果为：
+
+| 指标 | 修复前 | P1 修复后 | 变化 |
+|---|---:|---:|---:|
+| 圈时 | 41.945736448148 s | 42.097939257058 s | +0.152202808910 s |
+| 单圈 TSAC 能量 | 0.373934098748 kWh | 0.369764068982 kWh | -0.004170029766 kWh |
+| 最大节点 TSAC 功率 | 80047.930791 W | 77924.949499 W | 无超限 |
+| 最大分段 TSAC 功率 | 83040.483881 W | 80000.074822 W | 在 1 W 容差内 |
+| 最小分段功率裕量 | -3040.483881 W | -0.074822 W | 在 1 W 容差内 |
+
+修复后节点功率、节点轮端力和分段功率超限计数均为 0，求解 2 次外迭代收敛。该表只隔离 P1 数值影响；2026 实车滚动半径、传动比和制动输入尚未确认，未混入本基线。
 
 闭环积分包含最后 `N→1` 段。正式演示传入 `models.endurance.num_laps=26`、`safety_factor=1.10`；通用接口并不硬编码这两个值。模型重复同一个已求得的最小圈速剖面，因此是 First-order endurance estimate。
 

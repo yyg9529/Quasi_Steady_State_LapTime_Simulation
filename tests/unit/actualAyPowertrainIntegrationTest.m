@@ -24,13 +24,20 @@ classdef actualAyPowertrainIntegrationTest < matlab.unittest.TestCase
             track.kappa_1pm = [0.5 * testCase.Options.gravity_mps2 / 100; 0];
             track.is_closed = false;
             vLat_mps = [20; 20];
-            expected_mps = sqrt(100 + ...
-                2 * 0.5 * testCase.Options.gravity_mps2 * 10);
 
             vFwd_mps = forward_pass( ...
                 track, testCase.Ggv, vLat_mps, testCase.Options);
+            representativeSpeed_mps = mean(vFwd_mps);
+            ay_g = representativeSpeed_mps^2 * track.kappa_1pm(1) ...
+                / testCase.Options.gravity_mps2;
+            cap = interp_ggv(testCase.Ggv, ...
+                representativeSpeed_mps, ay_g, testCase.Options);
+            requiredAx_mps2 = (vFwd_mps(2)^2 - vFwd_mps(1)^2) ...
+                / (2 * track.ds_m);
 
-            testCase.verifyEqual(vFwd_mps(2), expected_mps, AbsTol=1e-12);
+            testCase.verifyLessThanOrEqual(requiredAx_mps2, ...
+                cap.ax_max_mps2 + testCase.Options.accel_tolerance_mps2);
+            testCase.verifyGreaterThan(vFwd_mps(2), vFwd_mps(1));
         end
 
         function testBackwardPassQueriesActualAy(testCase)
