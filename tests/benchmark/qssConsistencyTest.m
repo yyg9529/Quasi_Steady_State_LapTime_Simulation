@@ -28,7 +28,7 @@ classdef qssConsistencyTest < matlab.unittest.TestCase
             vehicle = vehicle_baseline();
             tire = tire_load_sensitive_baseline();
             aero = aero_baseline();
-            powertrain = powertrain_baseline();
+            powertrain = powertrain_emrax228_hvcc_demo();
             brake = brake_baseline();
             coarseOptions = default_qss_options();
             coarseOptions.v_grid_mps = (0:1:45).';

@@ -7,8 +7,9 @@ vehicle = vehicle_baseline();
 models = struct();
 models.tire = tire_load_sensitive_baseline();
 models.aero = aero_baseline();
-models.powertrain = powertrain_baseline();
+models.powertrain = powertrain_emrax228_hvcc_demo();
 models.brake = brake_baseline();
+models.endurance = struct("num_laps", 1, "safety_factor", 1.0);
 track = read_track_csv(fullfile(projectRoot, "data", "track", ...
     "simple_track.csv"));
 

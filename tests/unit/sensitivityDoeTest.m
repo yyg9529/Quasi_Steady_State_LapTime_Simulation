@@ -18,8 +18,11 @@ classdef sensitivityDoeTest < matlab.unittest.TestCase
             testCase.BaseConfig.vehicle = vehicle_baseline();
             testCase.BaseConfig.models.tire = tire_load_sensitive_baseline();
             testCase.BaseConfig.models.aero = struct("enabled", false);
-            testCase.BaseConfig.models.powertrain = powertrain_baseline();
+            testCase.BaseConfig.models.powertrain = ...
+                powertrain_emrax228_hvcc_demo();
             testCase.BaseConfig.models.brake = brake_baseline();
+            testCase.BaseConfig.models.endurance = struct( ...
+                "num_laps", 1, "safety_factor", 1.0);
             options = default_qss_options();
             options.v_grid_mps = [0; 10; 20; 30; 40; 45];
             options.ay_grid_g = -2:0.2:2;
@@ -43,8 +46,8 @@ classdef sensitivityDoeTest < matlab.unittest.TestCase
 
         function testDoeRunsTwentyCasesAndSorts(testCase)
             mass_kg = repelem([280; 300; 320; 340], 5);
-            max_power_W = repmat((60000:10000:100000).', 4, 1);
-            cases = table(mass_kg, max_power_W);
+            inverter_power_W = repmat((60000:10000:100000).', 4, 1);
+            cases = table(mass_kg, inverter_power_W);
 
             result = run_doe(testCase.BaseConfig, cases);
 

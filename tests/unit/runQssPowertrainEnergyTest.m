@@ -85,6 +85,16 @@ classdef runQssPowertrainEnergyTest < matlab.unittest.TestCase
                 ["powertrain", "energy", "active_constraints"])));
         end
 
+        function testPrebuiltGgvRejectsLegacyFlatPowertrain(testCase)
+            models = testCase.Models;
+            models.powertrain = struct("max_power_W", 80000);
+
+            action = @() run_qss_lap(testCase.Track, testCase.Vehicle, ...
+                models, testCase.Options);
+
+            testCase.verifyError(action, "QSSLTS:PowertrainConfig");
+        end
+
         function testPrebuiltGgvWithoutProvenanceErrors(testCase)
             models = testCase.Models;
             models.ggv = rmfield(models.ggv, "provenance");

@@ -17,7 +17,7 @@ end
 
 options = default_qss_options(options);
 validateInputs(vehicle, tire, options);
-powertrain = fillPowertrainDefaults(powertrain, options);
+powertrain = normalizePowertrain(powertrain);
 brake = fillBrakeDefaults(brake);
 aero = fillAeroDefaults(aero);
 validateDrivetrainConsistency(vehicle, powertrain);
@@ -300,24 +300,26 @@ if options.ggv_relaxation <= 0 || options.ggv_relaxation > 1
 end
 end
 
-function model = fillPowertrainDefaults(model, options)
+function model = normalizePowertrain(model)
+if isNoPowertrainSentinel(model)
+    model = struct("enabled", false);
+    return
+end
 if isCompositePowertrain(model)
     model = validate_powertrain_config(model);
     return
 end
-
-if ~isfield(model, "enabled"), model.enabled = false; end
-if ~isfield(model, "max_power_W"), model.max_power_W = inf; end
-if ~isfield(model, "max_total_wheel_torque_Nm")
-    if isfield(model, "max_wheel_torque_Nm")
-        model.max_total_wheel_torque_Nm = model.max_wheel_torque_Nm;
-    else
-        model.max_total_wheel_torque_Nm = inf;
-    end
+error("QSSLTS:PowertrainConfig", ...
+    "Powertrain must be a complete composite config or disabled sentinel.");
 end
-if ~isfield(model, "max_speed_mps"), model.max_speed_mps = options.v_max_mps; end
-if ~isfield(model, "drive_efficiency"), model.drive_efficiency = 1; end
-if ~isfield(model, "layout"), model.layout = "AWD"; end
+
+function result = isNoPowertrainSentinel(model)
+names = string(fieldnames(model));
+isEmpty = isempty(names);
+isMinimalDisabled = isequal(names, "enabled") ...
+    && (islogical(model.enabled) || isnumeric(model.enabled)) ...
+    && isscalar(model.enabled) && ismember(double(model.enabled), 0);
+result = isEmpty || isMinimalDisabled;
 end
 
 function result = isCompositePowertrain(model)

@@ -38,5 +38,15 @@ classdef qssScopeTest < matlab.unittest.TestCase
                 loadSensitiveTire, "wheel_inertia_kgm2"));
             testCase.verifyFalse(isfield(loadSensitiveTire, "slip_force"));
         end
+
+        function test_tire_envelope_provenance_has_no_slip_force_scope(testCase)
+            projectRoot = fileparts(fileparts(fileparts(mfilename("fullpath"))));
+            sourcePath = fullfile(projectRoot, "src", "tire", ...
+                "tire_envelope_provenance.m");
+
+            sourceText = fileread(sourcePath);
+
+            testCase.verifyFalse(contains(sourceText, "slip_force"));
+        end
     end
 end

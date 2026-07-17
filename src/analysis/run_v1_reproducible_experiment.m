@@ -62,8 +62,10 @@ function config = buildBaselineConfig(projectRoot)
     config.models = struct();
     config.models.tire = tire_load_sensitive_baseline();
     config.models.aero = aero_baseline();
-    config.models.powertrain = powertrain_baseline();
+    config.models.powertrain = powertrain_emrax228_hvcc_demo();
     config.models.brake = brake_baseline();
+    config.models.endurance = struct( ...
+        "num_laps", 1, "safety_factor", 1.0);
     config.options = default_qss_options();
     config.options.v_grid_mps = [0:2:44, 45].';
     config.options.ay_grid_g = -4:0.2:4;
@@ -71,10 +73,10 @@ function config = buildBaselineConfig(projectRoot)
 end
 
 function cases = buildDoeTable()
-    [mass_kg, max_power_W, tire_mu_scale] = ndgrid( ...
+    [mass_kg, inverter_power_W, tire_mu_scale] = ndgrid( ...
         [280, 300, 320], [60000, 80000, 100000], [0.9, 1.0, 1.1]);
-    cases = table(mass_kg(:), max_power_W(:), tire_mu_scale(:), ...
-        VariableNames=["mass_kg", "max_power_W", "tire_mu_scale"]);
+    cases = table(mass_kg(:), inverter_power_W(:), tire_mu_scale(:), ...
+        VariableNames=["mass_kg", "inverter_power_W", "tire_mu_scale"]);
 end
 
 function profile = makeProfileTable(result)
@@ -144,17 +146,18 @@ function manifest = makeManifest(config, doe, projectRoot)
     manifest.baseline.aero = makeJsonSafe(config.models.aero);
     manifest.baseline.powertrain = makeJsonSafe(config.models.powertrain);
     manifest.baseline.brake = makeJsonSafe(config.models.brake);
+    manifest.baseline.endurance = makeJsonSafe(config.models.endurance);
     manifest.baseline.options = makeJsonSafe(config.options);
     manifest.baseline.model_functions = struct( ...
         "vehicle", "vehicle_baseline", ...
         "tire", "tire_load_sensitive_baseline", ...
         "aero", "aero_baseline", ...
-        "powertrain", "powertrain_baseline", ...
+        "powertrain", "powertrain_emrax228_hvcc_demo", ...
         "brake", "brake_baseline");
     manifest.doe.design = "full_factorial_3x3x3";
     manifest.doe.parameter_names = doe.parameter_names(:);
     manifest.doe.mass_kg = [280; 300; 320];
-    manifest.doe.max_power_W = [60000; 80000; 100000];
+    manifest.doe.inverter_power_W = [60000; 80000; 100000];
     manifest.doe.tire_mu_scale = [0.9; 1.0; 1.1];
     manifest.doe.case_count = height(doe.ranking);
     manifest.doe.all_cases_converged = all(cellfun( ...

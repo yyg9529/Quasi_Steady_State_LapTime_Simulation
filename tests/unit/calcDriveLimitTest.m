@@ -13,40 +13,42 @@ classdef calcDriveLimitTest < matlab.unittest.TestCase
             testCase.applyFixture(matlab.unittest.fixtures.PathFixture( ...
                 fullfile(projectRoot, "data"), IncludingSubfolders=true));
             testCase.Tire = tire_simple_baseline();
-            testCase.Powertrain = powertrain_baseline();
+            testCase.Powertrain = powertrain_emrax228_hvcc_demo();
             testCase.Options = default_qss_options();
         end
     end
 
     methods (Test)
-        function testLowSpeedTorqueLimit(testCase)
+        function testLowSpeedCompositeLimit(testCase)
             loads.Fx_available_N = 1e5 * ones(4, 1);
             powertrain = testCase.Powertrain;
-            powertrain.layout = "AWD";
+            capability = evaluate_powertrain_constraints(1, ...
+                testCase.Tire, powertrain, ...
+                powertrain.battery.V_bus_assumed_V);
 
             drive = calc_drive_limit(1, loads, testCase.Tire, ...
                 powertrain, testCase.Options);
 
-            expected_N = powertrain.max_total_wheel_torque_Nm ...
-                / testCase.Tire.rolling_radius_m;
-            testCase.verifyEqual(drive.Fx_drive_max_N, expected_N, ...
+            testCase.verifyEqual(drive.Fx_drive_max_N, ...
+                capability.available_wheel_force_N, ...
                 AbsTol=1e-10);
-            testCase.verifyEqual(drive.limiter, "torque");
+            testCase.verifyEqual(drive.limiter, capability.limiter);
         end
 
-        function testHighSpeedPowerLimit(testCase)
+        function testHighSpeedCompositeLimit(testCase)
             loads.Fx_available_N = 1e5 * ones(4, 1);
             powertrain = testCase.Powertrain;
-            powertrain.layout = "AWD";
+            capability = evaluate_powertrain_constraints(30, ...
+                testCase.Tire, powertrain, ...
+                powertrain.battery.V_bus_assumed_V);
 
             drive = calc_drive_limit(30, loads, testCase.Tire, ...
                 powertrain, testCase.Options);
 
-            expected_N = powertrain.max_power_W ...
-                * powertrain.drive_efficiency / 30;
-            testCase.verifyEqual(drive.Fx_drive_max_N, expected_N, ...
+            testCase.verifyEqual(drive.Fx_drive_max_N, ...
+                capability.available_wheel_force_N, ...
                 AbsTol=1e-10);
-            testCase.verifyEqual(drive.limiter, "power");
+            testCase.verifyEqual(drive.limiter, capability.limiter);
         end
 
         function testRwdUsesRearTireCapacity(testCase)
@@ -62,7 +64,6 @@ classdef calcDriveLimitTest < matlab.unittest.TestCase
         function testZeroSpeedIsFinite(testCase)
             loads.Fx_available_N = 1e5 * ones(4, 1);
             powertrain = testCase.Powertrain;
-            powertrain.layout = "AWD";
 
             drive = calc_drive_limit(0, loads, testCase.Tire, ...
                 powertrain, testCase.Options);

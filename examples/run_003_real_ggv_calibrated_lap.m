@@ -7,7 +7,7 @@ vehicle = vehicle_baseline();
 models = struct();
 models.tire = tire_load_sensitive_baseline();
 models.aero = aero_baseline();
-models.powertrain = powertrain_baseline();
+models.powertrain = struct("enabled", false);
 models.brake = brake_baseline();
 models.ggv_real = read_real_ggv(fullfile(projectRoot, "data", ...
     "ggv_real", "synthetic_real_ggv.csv"));

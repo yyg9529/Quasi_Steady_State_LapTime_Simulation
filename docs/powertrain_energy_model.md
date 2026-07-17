@@ -1,261 +1,108 @@
-# 动力与能量模型冻结契约
+# 动力系统、能量与约束模型
 
-## 范围
+## 来源与冻结值
 
-组合电驱接口已经接入 `calc_drive_limit`、模型 GGV 与圈速积分链路。
-旧的扁平动力接口暂时保留给尚未迁移的 legacy/DOE 调用；新旧接口不互设别名，
-组合配置不完整时直接报错，不回退到旧模型。
+规则源为 **Formula Student Rules 2026 v1.1**（`https://www.formulastudent.de/fileadmin/user_upload/all/2026/rules/FS-Rules_2026_v1.1.pdf`）：TS 最大电压 `600 VDC`、TSAC 出口最大功率 `80 kW`、正向最大电流 `+500 A`。preset 的 `rule_ids` 冻结为 power=`EV2.2.1`、current=`EV2.2.2`、voltage=`EV4.1.1`；EV2.2.3 明确允许 regen，但本模型禁用再生。代码冻结 `rules.version="1.1"`。
 
-V1 仅支持 `motor_count=1`，其他值抛出
-`QSSLTS:PowertrainMotorCount`。齿比定义为
-`gear_ratio = omega_motor / omega_wheel`，滚动半径只允许来自
-`tire.rolling_radius_m`。`models.endurance` 是独立模型，不嵌入
-`models.powertrain`。
+电机源为 EMRAX 228 datasheet v1.6（`https://emrax.com/wp-content/uploads/2025/03/EMRAX_228_datasheet_v1.6.pdf`）的 HV combined-cooling 数据。数据表额定点包括 `104 kW@4500 rpm`，实现以约 `830 V` 作为达到该峰值功率所需电压；还保留 220 Nm 峰值转矩、6500 rpm 机械转速上限和 phase Arms 数据。75 kW 连续功率与 130 Nm 连续转矩只作为指定 combined-cooling 边界下的诊断数据；没有热模型时不能据此给出热可行性结论。数据表没有提供本项目所需的完整 600 V 转矩-转速图，因此下面的 600 V 包络是保守工程推断，不是供应商认证曲线。
 
-## 冻结配置
+正式示例 `powertrain_emrax228_hvcc_demo` 的工程假设为：单电机 RWD；`gear_ratio=4.369334602435052` 与 `tire.rolling_radius_m=0.2286` m 将 120 km/h 映射到约 6084 rpm；传动效率 0.90、电机效率 0.94。电池参数为 `V_max/V_nominal/V_min/V_bus=600/540/450/600 V`、8 kWh、`SOC_init=0.95`、`SOC_min=0.10`、100 kW/300 A 峰值、放电效率 0.98 和 500 W TS auxiliary。逆变器假设为 600 V、100 kW、300 DC A、250 phase Arms、效率 0.97。Formula Student Rules 2026 v1.1 `D7.1.3` 给出约 22 km 耐久距离；除以本地赛道约 0.857461 km 得 25.66 圈，故取 26 圈；1.10 是显式工程安全系数。它不代表实际赛车的已确认硬件。
 
-组合配置顶层严格为：
+## 保守 600 V 电机 T-N 包络
+
+对电机转速 `n`（rpm）和母线电压 `V_bus`（V）：
 
 ```text
-enabled, motor_count, layout, gear_ratio, drivetrain_efficiency,
-motor, battery, inverter, rules
-```
-
-规则字段：
-
-```text
-rules.name
-rules.season
-rules.version                    % "1.1"
-rules.max_ts_voltage_V           % 600 VDC
-rules.max_ts_power_W             % 80 kW
-rules.max_ts_current_A           % 500 A
-rules.regen_enabled_in_model     % false
-rules.source, rules.source_url, rules.rule_ids
-```
-
-电机计算字段：
-
-```text
-motor.name                       % "EMRAX_228_HV_CC"
-motor.source, motor.source_url
-motor.mass_kg
-motor.max_mechanical_speed_rpm
-motor.physical_peak_power_W
-motor.physical_peak_power_rpm
-motor.physical_cont_power_W
-motor.peak_torque_Nm
-motor.cont_torque_Nm
-motor.required_voltage_peak_power_V
-motor.peak_phase_current_Arms
-motor.cont_phase_current_Arms
-motor.Kv_no_load_rpm_per_V
-motor.Kv_nominal_load_rpm_per_V
-motor.Kv_peak_load_rpm_per_V
-motor.Kt_Nm_per_Arms
-motor.eta_const                  % 0.94, engineering assumption
-```
-
-电池与逆变器字段只使用以下名称：
-
-```text
-battery.V_max_V
-battery.V_nominal_V
-battery.V_min_V
-battery.V_bus_assumed_V
-battery.E_nominal_kWh
-battery.SOC_init
-battery.SOC_min
-battery.P_discharge_peak_W
-battery.I_discharge_peak_A
-battery.eta_discharge
-battery.P_ts_aux_W
-
-inverter.V_dc_max_V
-inverter.P_dc_peak_W
-inverter.I_dc_peak_A
-inverter.I_phase_peak_Arms
-inverter.eta_const
-```
-
-demo 是 1 motor、RWD、`gear_ratio=4.369334602435052`、传动效率
-0.90 的概念配置。该齿比把 600 V 推断截止点 6084 rpm、
-`tire.rolling_radius_m=0.2286 m` 映射到 120 km/h；半径不存入动力配置。
-电池 600/540/450 V、8 kWh、SOC 0.95/0.10、100 kW、300 A、效率
-0.98、500 W 辅助功率，以及逆变器 600 V、100 kW、300 A DC、
-250 Arms、效率 0.97，均为 concept demo 假设，不代表实车。
-
-## 官方依据与建模边界
-
-[Formula Student Rules 2026 v1.1](https://www.formulastudent.de/fileadmin/user_upload/all/2026/rules/FS-Rules_2026_v1.1.pdf)：
-
-- EV2.2.1：TSAC 出口功率不超过 80 kW；
-- EV2.2.2：TSAC 出口电流不超过 500 A；
-- EV2.2.3：允许能量回收；
-- EV4.1.1：主牵引系统最大 600 VDC。
-
-80 kW 与 500 A 均是 TSAC 出口 DC 限制。规则允许回生，
-`regen_enabled_in_model=false` 是 V1 模型选择，不是规则禁止回生。
-
-[EMRAX 228 datasheet v1.6](https://emrax.com/wp-content/uploads/2025/03/EMRAX_228_datasheet_v1.6.pdf)
-给出 HV 电机在 830 V 下 104 kW@4500 rpm（S2 2 min）、峰值扭矩
-220 Nm、限制转速 6500 rpm，以及 CC 条件下 75 kW/130 Nm 连续额定。
-75 kW/130 Nm 是依赖规定冷却边界的目录额定，当前模型没有热状态，不能据此得出实车热连续能力结论。
-官方峰值效率为 96%；`motor.eta_const=0.94` 是 demo 的保守常效率假设。
-`Kt=0.94 Nm/Arms` 与效率 0.94 数值相同但物理意义不同。
-
-## 电压包络
-
-对给定母线电压和电机转速：
-
-```text
-V_eff = min(V_bus,
-            rules.max_ts_voltage_V,
-            inverter.V_dc_max_V,
-            motor.required_voltage_peak_power_V)
+V_motor_eff = min(V_bus, rules.max_ts_voltage_V,
+                  inverter.V_dc_max_V,
+                  motor.required_voltage_peak_power_V)
 
 P_voltage = motor.physical_peak_power_W
-            * min(V_eff / motor.required_voltage_peak_power_V, 1)
-n_peak_load = motor.Kv_peak_load_rpm_per_V * V_eff
+            * min(V_motor_eff / motor.required_voltage_peak_power_V, 1)
+n_peak_load = motor.Kv_peak_load_rpm_per_V * V_motor_eff
 n_stop = min(motor.max_mechanical_speed_rpm,
-             motor.Kv_no_load_rpm_per_V * V_eff)
+             motor.Kv_no_load_rpm_per_V * V_motor_eff)
+omega = n * 2*pi/60                                  [rad/s]
 
+T_peak = motor.peak_torque_Nm                         [N m]
+T_power = P_voltage / max(omega, 1 rad/s)             [N m]
 T_linear = motor.peak_torque_Nm
-           * clamp((n_stop-rpm) / max(n_stop-n_peak_load, eps), 0, 1)
-
-T_envelope = min(motor.peak_torque_Nm,
-                 P_voltage / max(omega, omegaReg),
-                 T_linear)
+           * clamp((n_stop-n)/max(n_stop-n_peak_load,eps),0,1) [N m]
+T_available = min(T_peak, T_power, T_linear)           [N m]
 ```
 
-实现使用 `omegaReg=1 rad/s` 作零速数值正则化。`rpm>=n_stop` 时能力为
-0，主标签按冻结优先级记为 `motor_speed`；`motor_voltage` 只在
-`n_peak_load<rpm<n_stop` 的电压降额区参与主标签。低速区即使
-`T_linear` 数值钳位到 220 Nm，也不把电压误报为 active/primary。
+在 600 V 下，峰值功率按 `104 kW * 600/830` 线性降额，并在峰值负载速度之后线性收缩至停止速度；`n>=n_stop` 时可用转矩为 0。`motor_voltage` 主标签只可能出现在 `n_peak_load<n<n_stop` 的线性收缩区。`1 rad/s` 只用于零速数值正则化。`voltage_limited_engineering_inference` 标签只用于低于约 830 V 的降额区；达到数据表所需电压时标为 `datasheet_peak_power_voltage`。
 
-600 V 锚点：
+失效边界：该包络只用于固定正转速、正驱动力、固定 DC 电压的概念级 QSS；不描述 dq/弱磁控制、调制极限、瞬态过载、温升/冷却、SOC 与内阻导致的母线跌落、负转速或再生象限。超出这些条件不能把结果解释为部件能力保证。
+
+## actual Ay 下的驱动力能力
+
+GGV 每个 `(v, Ay)` 网格点和圈速结果重建均采用实际横向状态（actual Ay）。轮胎 combined-slip 先扣除横向力需求，再得到驱动轮纵向抓地上限；`calc_drive_limit` 将其与动力候选转矩共同取最小值。因此弯中 `Ax` 能力不会错误复用 `Ay=0` 的直线结果。
+
+候选约束包括电机转矩/功率/电压/转速、FSG 规则功率/电流、电池功率/电流、逆变器 DC 功率/DC 电流/相电流和轮胎牵引。TSAC 上限及其机械功率链为：
 
 ```text
-P_voltage = 104000 * 600 / 830 = 75180.7229 W
-n_peak_load = 5.65 * 600 = 3390 rpm
-n_stop = 10.14 * 600 = 6084 rpm
+V_TSAC_eff = min(V_bus, rules.max_ts_voltage_V,
+                 battery.V_max_V, inverter.V_dc_max_V)
+P_TSAC_cap = min(P_rule, V_TSAC_eff*I_rule,
+                 P_battery, V_TSAC_eff*I_battery,
+                 P_inverter, V_TSAC_eff*I_inverter)
+P_inverter_in_cap = max(P_TSAC_cap-P_ts_aux, 0)
+P_motor_mechanical_cap = P_inverter_in_cap*eta_inverter*eta_motor
 ```
 
-该连续包络是保守工程推断，不是厂家发布的 600 V 曲线。830 V 单调性测试使用放宽到 830 V 的纯数学场景；FSG demo 仍受 600 V 规则和逆变器上限约束。
-
-## TSAC 功率链与电流域
-
-以有效 TS 电压 `V` 计算：
+电池 `eta_discharge` 只用于从 TSAC 能量换算储能侧能量，不再乘进瞬时驱动力链。轮端关系为：
 
 ```text
-P_tsac_cap = min(rules.max_ts_power_W,
-                 V * rules.max_ts_current_A,
-                 battery.P_discharge_peak_W,
-                 V * battery.I_discharge_peak_A,
-                 inverter.P_dc_peak_W,
-                 V * inverter.I_dc_peak_A)
-
-P_mechanical_cap = max(P_tsac_cap - battery.P_ts_aux_W, 0)
-                   * inverter.eta_const
-                   * motor.eta_const
-```
-
-顺序必须是先限制 TSAC 出口功率，再扣除辅助功率，最后乘逆变器和电机效率。
-`battery.eta_discharge` 留给电池能量账本，不在该 TSAC 出口能力链中重复相乘。
-
-规则、电池和逆变器 DC 电流均使用 A；电机与逆变器相电流均使用 Arms。
-严禁把 DC A 与 phase Arms 直接取最小值。相电流通过
-`motor.Kt_Nm_per_Arms` 转成扭矩候选；TS DC 限制先转成功率，再转成机械扭矩候选。
-
-`evaluate_powertrain_constraints` 返回每个候选扭矩、候选名称、对应发布标签和主标签。
-候选覆盖电机峰值扭矩/相电流、逆变器相电流、规则/电池/逆变器的功率与
-DC 电流、motor power、motor voltage 和 speed cutoff。轮端力为：
-
-```text
+n_motor = v / tire.rolling_radius_m * gear_ratio * 60/(2*pi)
 F_wheel = T_motor * gear_ratio * drivetrain_efficiency
           / tire.rolling_radius_m
 ```
 
-该力尚未与轮胎 traction 候选合并。
+## 功率与电流域
 
-## 结果与 active constraint 契约
-
-后续圈速集成的 `limiter` 必须是 `N x 1`。`active_constraints` 只允许
-14 个字段：
+驱动时逐点使用量采用：
 
 ```text
-lateral, brake, traction,
-motor_torque, motor_power, motor_speed, motor_voltage,
-rule_power, rule_current,
-battery_power, battery_current,
-inverter_power, inverter_current,
-top_speed
+F_drive = max(m*Ax + F_drag, 0)          (F_rolling=0)
+P_TSAC = F_drive*v /
+         (eta_drivetrain*eta_inverter*eta_motor) + P_ts_aux
+I_TSAC_DC = P_TSAC / V_bus
+I_motor_phase_Arms = T_motor / Kt
 ```
 
-active 判定：利用率 `util>=1-1e-3`；速度使用绝对 0.01 加相对
-`1e-3` 容差；加速度使用绝对 0.01 加相对 `1e-3` 容差；`brake`
-仅在贴合 `ax_min` 时成立。
+`tsac_dc_current_used_A` 与 `battery_dc_current_used_A` 按包含 auxiliary 的 `P_TSAC/V_bus` 计算；`inverter_dc_current_used_A` 先扣除 auxiliary，再除以母线电压。它们都是 DC A；`motor_phase_current_used_Arms` 与 `inverter_phase_current_used_Arms` 是 phase Arms。DC 电流与相 RMS 电流属于不同电气域，不能用同一个数值上限替代。规则 `500 A` 是 TSAC 出口正向 DC 电流；逆变器 `I_phase_peak_Arms` 独立参与候选约束。
 
-并列主标签优先级严格为：
+## active constraints 与主 limiter
+
+`result.active_constraints` 具有 14 个字段，可同时为真：`lateral, brake, traction, motor_torque, motor_power, motor_speed, motor_voltage, rule_power, rule_current, battery_power, battery_current, inverter_power, inverter_current, top_speed`。主 `result.limiter` 的精确优先级为 `lateral > brake > top_speed > rule_power > rule_current > battery_power > battery_current > inverter_power > inverter_current > motor_speed > motor_voltage > motor_power > motor_torque > traction > coasting > unconstrained`。激活容差按量纲冻结：`lateral` 与 `top_speed` 使用绝对 `0.01 m/s`，`brake` 使用绝对 `0.01 m/s²`，`motor_speed` 使用绝对 `0.01 rpm`；四者均叠加相对 `1e-3`。候选 torque 与 traction utilization 使用相对 `1e-3`。完整数据契约见 [model_interface.md](model_interface.md)。
+
+## 单圈和耐久能量
+
+能量只在速度剖面收敛后计算，不反馈到 GGV。每段以首末速度均值和段加速度计算 TSAC 与储能侧能量：
 
 ```text
-lateral > brake > top_speed >
-rule_power > rule_current >
-battery_power > battery_current >
-inverter_power > inverter_current >
-motor_speed > motor_voltage > motor_power > motor_torque >
-traction > coasting > unconstrained
+E_segment_TS = P_TSAC * dt / 3.6e6                         [kWh]
+E_segment_stored = E_segment_TS / battery.eta_discharge   [kWh]
+E_lap_stored = sum(E_segment_stored)
+E_endurance_stored = E_lap_stored * num_laps * safety_factor
+E_nominal_required = E_endurance_stored / (SOC_init-SOC_min)
 ```
 
-圈速集成按实际节点 `v/ax/ay` 重算轮载、combined-slip 轮胎能力和动力能力；
-`lateral/brake/traction/top_speed` 由该集成层与 GGV 边界共同判定。内点负加速度
-只有贴合 `ax_min` 时才是 `brake`，不能按加速度符号直接分类。
+闭环积分包含最后 `N→1` 段。正式演示传入 `models.endurance.num_laps=26`、`safety_factor=1.10`；通用接口并不硬编码这两个值。模型重复同一个已求得的最小圈速剖面，因此是 First-order endurance estimate。
 
-功率结果必须区分 capability 与 usage。每个节点至少记录：电机转速、可用/已用电机扭矩、可用/已用轮端力、TSAC 功率上限/实际使用、各 DC 电流、各 phase Arms、
-`V_bus`、`voltage_scenario`、`thermal_feasibility_evaluated=false` 和
-`regen_enabled=false`。输入配置中的 `motor.thermal_model_enabled=false` 与
-`rules.regen_enabled_in_model=false` 是模型开关；它们不是对外结果字段。
-不能用“可用能力”替代“实际使用量”进行能量积分。
+冻结假设是固定 DC 母线电压、常数效率、无回生、无热状态、`F_rolling=0`。`thermal_feasibility_evaluated=false` 与 `regen_enabled=false` 是显式失效边界；容量可行性只比较估算 SOC 窗口，不替代电芯、BMS、内阻、温度和寿命验证。
 
-## 能量与耐久契约
+## DOE 与工程图
 
-节点级 `result.powertrain` 是能力/使用量快照；能量账本使用相邻节点重构的分段量。
-闭合赛道有 `N` 段并显式包含 `N→1`，开放赛道有 `N-1` 段。分段加速度与均速为：
+DOE 的 `inverter_power_W` 映射到 `models.powertrain.inverter.P_dc_peak_W`，`gear_ratio` 直接映射到 `models.powertrain.gear_ratio`；旧扁平动力扫描已退役，改变 `rules.*` 报 `QSSLTS:AnalysisRulesImmutable`。
 
-```text
-ax_segment = (v_next^2 - v_start^2) / (2*ds)
-v_mean = 0.5 * (v_start + v_next)
+以下 API 只读取 `result`：
+
+```matlab
+plot_track_speed_map(result)
+plot_powertrain_energy_result(result)
+plot_ggv_surface(result)
 ```
 
-当前没有滚阻模型，因此 `F_rolling=0`。驱动力取
-`max(m*ax_segment + F_drag, 0)`；回生关闭，制动段不会形成负能耗。
-TSAC 功率按传动、逆变器和电机常效率链换算，并在每一段加入辅助功率。
-辅助功率计入 TSAC 与电池侧 DC 功率/电流，不计入逆变器 DC 电流、
-电机/逆变器 phase Arms、轮端力或电机扭矩。
-模型采用固定 DC 母线电压、常数效率、无回生、无热状态；
-`battery.eta_discharge` 仅将 TSAC 能量换算为电池储能消耗。
-
-段与累计字段严格为：
-
-```text
-segment_energy_ts_kWh, segment_energy_stored_kWh
-cumulative_energy_ts_kWh, cumulative_energy_stored_kWh
-```
-
-累计数组长度为 `N_segment+1` 且首项为 0。标量输出为
-`E_lap_ts_kWh`、`E_lap_stored_kWh`、`E_endurance_stored_kWh`、
-`E_nominal_required_kWh`、`SOC_end_estimated` 和
-`can_finish_endurance_estimated`。耐久储能需求等于单圈储能消耗乘圈数和安全系数；
-这里假定每圈都重复同一个已求得的最小圈速剖面，不模拟圈间 SOC、温度或性能变化。
-标称容量需求再除以 `SOC_init-SOC_min`。结束 SOC 由耐久储能需求除以标称容量估算，
-可行性判定在 `SOC_min` 边界使用浮点容差。
-
-`models.endurance` 与 powertrain 独立。D7.1.3 规定完整耐久约 22 km。
-冻结的真实赛道换算结果为 `ceil(...)=26` 圈；本提交只记录任务书给定结果，未读取或运行真实赛道。
-`safety_factor=1.10` 是工程假设，不是规则值。
-
-`endurance_energy_feasible`、`thermal_feasibility_evaluated`、
-`regen_enabled` 和 `voltage_scenario` 是全局状态，不属于点级 limiter。
-对外提供的预生成 GGV 若启用组合动力，必须带有匹配的动力和轮胎 provenance；
-当前 GGV 未保存完整气动参数 provenance，因此启用气动的预生成 GGV 被保守拒绝，
-应由当前输入现场重新生成。
+动力图中的 80 kW/500 A 线是冻结的 **FSG rule reference**，不是跟随 DOE 或任意动态规则输入改变的设计参数。图和数值用于同一假设集下的相对筛选，不代表热、电气或实车绝对精度已验证。

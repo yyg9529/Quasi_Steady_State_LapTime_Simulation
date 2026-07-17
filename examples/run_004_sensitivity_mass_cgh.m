@@ -9,7 +9,7 @@ baseConfig.track = read_track_csv(fullfile(projectRoot, "data", "track", ...
 baseConfig.vehicle = vehicle_baseline();
 baseConfig.models.tire = tire_load_sensitive_baseline();
 baseConfig.models.aero = aero_baseline();
-baseConfig.models.powertrain = powertrain_baseline();
+baseConfig.models.powertrain = struct("enabled", false);
 baseConfig.models.brake = brake_baseline();
 baseConfig.models.ggv_real = read_real_ggv(fullfile(projectRoot, "data", ...
     "ggv_real", "synthetic_real_ggv.csv"));

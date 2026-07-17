@@ -1,5 +1,5 @@
 function result = run_analysis_case(config, scaleTable)
-%RUN_ANALYSIS_CASE Regenerate theoretical GGV and run one analysis case.
+%RUN_ANALYSIS_CASE Run one theoretical or frozen-calibration analysis case.
 
 arguments
     config (1,1) struct
@@ -9,12 +9,16 @@ end
 models = config.models;
 models = removeField(models, "ggv");
 models = removeField(models, "ggv_real");
+if isempty(scaleTable)
+    result = run_qss_lap( ...
+        config.track, config.vehicle, models, config.options);
+    return
+end
+
 ggv = generate_model_ggv(config.vehicle, models.tire, ...
     optionalModel(models, "aero"), optionalModel(models, "powertrain"), ...
     optionalModel(models, "brake"), config.options);
-if ~isempty(scaleTable)
-    ggv = apply_ggv_calibration_scales(ggv, scaleTable);
-end
+ggv = apply_ggv_calibration_scales(ggv, scaleTable);
 models.ggv = ggv;
 result = run_qss_lap(config.track, config.vehicle, models, config.options);
 end

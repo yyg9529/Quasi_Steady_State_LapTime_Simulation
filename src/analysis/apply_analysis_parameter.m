@@ -7,12 +7,26 @@ arguments
     value
 end
 
+parameterLower = lower(parameter);
+if parameterLower == "rules" ...
+        || parameterLower == "models.powertrain" ...
+        || parameterLower == "models.powertrain.rules" ...
+        || startsWith(parameterLower, "models.powertrain.rules.")
+    error("QSSLTS:AnalysisRulesImmutable", ...
+        "DOE and sensitivity studies cannot modify powertrain rules.");
+end
+if isLegacyPowertrainPath(parameterLower)
+    error("QSSLTS:AnalysisParameter", ...
+        "Legacy flat powertrain parameter is unsupported: %s", parameter);
+end
+
 if contains(parameter, ".")
     config = set_nested_field(config, parameter, value);
+    config = validateCompositePowertrain(config);
     return
 end
 
-switch lower(parameter)
+switch parameterLower
     case {"mass", "mass_kg"}
         config.vehicle.mass.total_kg = value;
     case {"cgh", "cg_height_m"}
@@ -27,9 +41,9 @@ switch lower(parameter)
         config.models.aero.CDA_m2 = value;
     case "front_downforce_frac"
         config.models.aero.front_downforce_frac = value;
-    case {"power", "max_power_w"}
-        config.models.powertrain.max_power_W = value;
-    case {"gear_ratio", "overall_gear_ratio"}
+    case "inverter_power_w"
+        config.models.powertrain.inverter.P_dc_peak_W = value;
+    case "gear_ratio"
         config = applyGearRatio(config, value);
     case {"brake_bias", "front_bias"}
         config.models.brake.front_bias = value;
@@ -39,24 +53,41 @@ switch lower(parameter)
         error("QSSLTS:AnalysisParameter", ...
             "Unsupported analysis parameter: %s", parameter);
 end
+config = validateCompositePowertrain(config);
 end
 
 function config = applyGearRatio(config, newRatio)
 if ~isscalar(newRatio) || ~isfinite(newRatio) || newRatio <= 0
     error("QSSLTS:GearRatio", "Gear ratio must be positive and finite.");
 end
-powertrain = config.models.powertrain;
-if ~isfield(powertrain, "overall_gear_ratio") ...
-        || powertrain.overall_gear_ratio <= 0
-    error("QSSLTS:GearRatio", ...
-        "Baseline powertrain.overall_gear_ratio is required.");
+config.models.powertrain.gear_ratio = newRatio;
 end
-ratioScale = newRatio / powertrain.overall_gear_ratio;
-powertrain.max_total_wheel_torque_Nm = ...
-    powertrain.max_total_wheel_torque_Nm * ratioScale;
-powertrain.max_speed_mps = powertrain.max_speed_mps / ratioScale;
-powertrain.overall_gear_ratio = newRatio;
-config.models.powertrain = powertrain;
+
+function config = validateCompositePowertrain(config)
+if ~isfield(config, "models") || ~isstruct(config.models) ...
+        || ~isscalar(config.models) ...
+        || ~isfield(config.models, "powertrain") ...
+        || ~isstruct(config.models.powertrain) ...
+        || ~isscalar(config.models.powertrain) ...
+        || ~isCompositePowertrain(config.models.powertrain)
+    return
+end
+config.models.powertrain = ...
+    validate_powertrain_config(config.models.powertrain);
+end
+
+function result = isCompositePowertrain(powertrain)
+markers = ["motor_count", "gear_ratio", "drivetrain_efficiency", ...
+    "motor", "battery", "inverter", "rules"];
+result = any(isfield(powertrain, cellstr(markers)));
+end
+
+function result = isLegacyPowertrainPath(parameter)
+legacyFields = ["max_power_w", "max_wheel_torque_nm", ...
+    "max_total_wheel_torque_nm", "max_speed_mps", ...
+    "overall_gear_ratio", "drive_efficiency"];
+legacyPaths = "models.powertrain." + legacyFields;
+result = any(parameter == legacyPaths);
 end
 
 function tire = scaleTireMu(tire, scale)

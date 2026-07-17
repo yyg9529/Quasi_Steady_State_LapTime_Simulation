@@ -1,88 +1,118 @@
-# 核心数据契约
+# 模型与结果接口
 
-## Track
+所有生产接口使用 SI 单位；字段名携带单位后缀。除明确标为可选的输入外，生产代码不猜测缺失参数。
 
-`track.s_m` 和 `track.kappa_1pm` 为 `N×1` 节点量。闭环赛道 `track.is_closed=true` 时，`track.ds_m` 为 `N×1`，最后一项表示 `N → 1`；开环时为 `(N-1)×1`。CSV 每行表示一个段起点，不重复首点。当前时间积分使用分段恒加速度形式 `dt=2*ds/(v_i+v_{i+1})`，不是简单的节点 `ds/v_i`。
+## 赛道输入
 
-## GGV
+`read_track_csv` 接受两种 CSV schema：
 
-```matlab
-ggv.v_mps                    % Nv x 1, strictly increasing
-ggv.ay_g                     % 1 x Nay, signed and increasing
-ggv.ax_max_g                 % Nv x Nay
-ggv.ax_min_g                 % Nv x Nay
-ggv.feasible                 % Nv x Nay
-ggv.ay_limit_pos_g
-ggv.ay_limit_neg_g
-ggv.accel_limiter
-ggv.brake_limiter
-ggv.solve_converged_accel
-ggv.solve_converged_brake
-ggv.solve_residual_accel_mps2
-ggv.solve_residual_brake_mps2
-ggv.lateral_limit_truncated
-ggv.wheel_lift
-ggv.source
-ggv.gravity_mps2
-ggv.provenance
-ggv.options
-```
+1. 简化曲率：`s_m,kappa_1pm`；
+2. 真实几何：`s_m,x_m,y_m,curvature_1_m,track_width_m`，其中别名映射为 `curvature_1_m → kappa_1pm`。
 
-第一维是速度，第二维是横向加速度。`interp_ggv` 接收 `ay_g`；`v^2*kappa` 的结果为 `m/s^2`，查询前必须除以 `g`。连续可行边界处的数值通过边界插值获得，分类标签从邻近可行格点选择，不能把相邻不可行格点的 `lateral_infeasible` 传播到可发布结果。
+两种 schema 均要求 `s_m` 严格递增。段长来自文件中的弧长列 `s_m`，不是 XY 欧氏距离；`x_m,y_m` 只用于判定真实几何文件是否以重复首点精确闭合，`track_width_m` 仅保留为逐点元数据，不用于固定赛线或赛线优化。
 
-若提供 `models.ggv`，`run_qss_lap` 跳过模型 GGV 生成；否则由车辆/轮胎/气动/动力/制动生成。Sensitivity/DOE 会移除固定理论 GGV并为每个 case 重生；有 `ggv_real` 时只冻结 baseline 的速度相关残差比例。
+内部赛道约定：
 
-## Vehicle 与模型
+- 开环：`N` 个节点、`N-1` 个段；
+- 闭环：`N 个唯一节点`、`N` 个段，最后一段为节点 `N→1`；
+- 闭环真实 geometry 输入必须含重复闭合端点；reader 删除最后重复行，闭合段精确取 `s_end-s_last_unique`，总长取 `s_end-s_start`；
+- `track.ds_m` 是段长，`track.s_m` 和 `track.kappa_1pm` 是节点量；
+- 只有不含几何坐标的 synthetic 简化 schema 才允许估计闭合段，并用 `closure_is_estimated=true` 明示；真实 geometry 不得估计。
 
-车辆参数按 `mass`、`geometry`、`inertia`、`load_transfer` 和 `drivetrain` 分组。核心函数不得硬编码车辆质量、轴距、轮距或重心高度。
+reader 保留字段为 `s_m, ds_m, kappa_1pm, x_m, y_m, track_width_m, is_closed, closure_is_estimated, length_m, source_file`。
 
-`models` 可包含 `tire`、`aero`、`powertrain`、`brake`、`ggv`、`ggv_real`、`suspension`。
+本地真实文件 `data/track/tianji_kart_QSS_track_closed.csv` 不进入 Git。维护者本地验收目标约为总长 `857.461445744691` m、闭合段 `1.461445744691` m；这些值是保护性检查，不表示该文件随仓库提供。
 
-- `powertrain.max_total_wheel_torque_Nm`：所有驱动轮的轮端总扭矩，不再乘效率。
-- `powertrain.max_power_W`：效率前功率，功率分支乘 `drive_efficiency`。
-- `brake.front_bias`：总制动力需求的前轴比例。
-- `brake.max_total_brake_torque_Nm`：7DOF 使用的四轮轮端机械制动总扭矩。
+## 组合动力系统输入
 
-## LapResult
+`models.powertrain` 启用时必须提供九个冻结顶层字段，生产接口仅定义这些字段：
 
 ```text
-lap_time_s, s_m, v_mps, ax_mps2, ay_mps2, limiter,
-ggv_used, options, v_lateral_limit_mps,
-segment_time_s, cumulative_time_s, track,
-calibration_report,
-solver.converged, solver.iterations, solver.max_change_mps
+enabled, motor_count, layout, gear_ratio,
+drivetrain_efficiency, motor, battery, inverter, rules
 ```
 
-## Analysis 与 limiter 报告
+- 当前生产主线要求 `motor_count=1`；`layout` 与车辆驱动桥布置一致。
+- `gear_ratio = omega_motor / omega_wheel`，是电机转速与车轮转速比，不是倒数。
+- `drivetrain_efficiency` 是电机轴至驱动轮的机械效率。
+- 唯一轮胎滚动半径来源是 `tire.rolling_radius_m`，动力配置不复制半径。
+- 禁用动力约束的合法最小 sentinel 是空/缺失配置或精确 `struct("enabled",false)`（文档短写 `enabled=false`）。
+- 启用配置缺字段或只使用扁平 `max_power_W/max_wheel_torque` 配置时拒绝，并报 `QSSLTS:PowertrainConfig`。
 
-`summarize_lap_result` 保留标量指标，并在 `summary.limiter_table` 返回：
+`rules` 冻结 Formula Student Rules 2026 v1.1 的 `max_ts_voltage_V=600`、`max_ts_power_W=80000`、`max_ts_current_A=500` 与 `regen_enabled_in_model=false`。DOE 不得通过改变规则来模拟部件设计变化。
+
+## GGV 与耐久输入
+
+`options.v_grid_mps` 与 `options.ay_grid_g` 定义 GGV 网格。未提供预建 GGV 时，`generate_model_ggv` 在各 `(v, Ay)` 网格点调用动力、轮胎和制动内核；前后向传播随后以节点 `actual Ay_mps2=v^2*kappa`（m/s²）重建横向加速度，并在调用 `interp_ggv` 前除以 `gravity_mps2` 转成 g，因此弯中 Ax 能力不是直线能力。
+
+`models.endurance` 独立于 `models.powertrain`，接口为正整数 `num_laps` 和不小于 1 的 `safety_factor`。它只在速度剖面收敛后的能量后处理中使用，不进入 GGV。
+
+## 基础 `LapResult`
+
+每次成功求解至少返回 `lap_time_s, s_m, v_mps, ax_mps2, ay_mps2, limiter, ggv_used, options, v_lateral_limit_mps, segment_time_s, cumulative_time_s, track, calibration_report, solver`。启用组合动力系统后再增加 `result.active_constraints`、`result.powertrain` 和 `result.energy`。
+
+## `result.limiter` 与 `result.active_constraints`
+
+`result.limiter` 是每个节点的唯一主标签；可能值包括 `lateral, brake, traction`、`motor_torque`、`motor_power`、`motor_speed`、`motor_voltage`、`rule_power`、`rule_current`、`battery_power`、`battery_current`、`inverter_power`、`inverter_current`、`top_speed`、`coasting`、`unconstrained`。
+
+`result.active_constraints` 是与节点数等长的 14 个逻辑向量，字段严格为：
 
 ```text
-limiter, point_count, distance_m, percent_distance
+lateral, brake, traction, motor_torque, motor_power, motor_speed,
+motor_voltage, rule_power, rule_current, battery_power, battery_current,
+inverter_power, inverter_current, top_speed
 ```
 
-百分比按 `track.ds_m` 加权，不按节点计数。可发布标签为：
+同一点可以多重激活；主标签的完整优先级为：
 
 ```text
-lateral, coasting, unconstrained, top_speed, tire, traction, torque, power,
-brake_disabled, brake_traction_bias, brake_mechanical,
-front_axle_lift, rear_axle_lift, measured
+lateral > brake > top_speed > rule_power > rule_current >
+battery_power > battery_current > inverter_power > inverter_current >
+motor_speed > motor_voltage > motor_power > motor_torque > traction >
+coasting > unconstrained
 ```
 
-`unconstrained` 表示该段纵向加速度位于 GGV 上下界内部，当前没有纵向能力边界处于活动状态；`coasting` 仅用于近零纵向加速度。空值、未知标签、内部临时标签和 `lateral_infeasible` 会被拒绝。表中占比表示 limiter 状态覆盖（包括 `unconstrained`），不等同于某个因素造成的圈时秒差。
+激活容差按物理量分别冻结：`lateral` 与 `top_speed` 使用绝对 `0.01 m/s`，`brake` 使用绝对 `0.01 m/s²`，`motor_speed` 使用绝对 `0.01 rpm`；四者均叠加相对 `1e-3`。候选 torque 与 traction utilization 使用相对 `1e-3`。没有主约束时再归为 `coasting` 或 `unconstrained`。
 
-`run_doe` 返回 baseline、所有 case 结果、排序、最快/最慢 summary、两端 limiter 表和对比表；calibration mode 为 `theory_only` 或 `frozen_baseline`。
+## `result.powertrain`
 
-## V1 report manifest
+长度为 `N` 的逐点向量为：
 
-`QSSLTS_V1_REPORT_V1` manifest 固定：Track 数组、Vehicle、QSS tire envelope provenance、Aero、Powertrain、Brake、完整 solver/GGV options、DOE levels、case 数和 calibration mode。JSON 中非有限标量使用 `"Inf"`、`"-Inf"` 或 `"NaN"`，避免静默变为 `null`。外部 evaluator 函数句柄不属于 QSS GGV provenance。
+```text
+motor_speed_rpm, motor_stop_speed_rpm,
+motor_torque_available_Nm, motor_torque_used_Nm,
+wheel_force_available_N, wheel_force_used_N,
+tsac_power_cap_W, tsac_power_used_W, tsac_dc_current_used_A,
+battery_dc_current_used_A, inverter_dc_current_used_A,
+motor_phase_current_used_Arms, inverter_phase_current_used_Arms,
+V_bus_V, effective_voltage_V,
+traction_force_available_N, powertrain_force_available_N
+```
 
-## Suspension lookup
+`candidate_names` 与 `candidate_limiters` 是全局 `1x12` 标签，`candidate_torque_available_Nm` 是 `Nx12` 候选矩阵。`thermal_feasibility_evaluated`、`regen_enabled`、`voltage_scenario` 和 `endurance_energy_feasible` 是全局 scalar；这后四项不是逐点 active constraint。
 
-`read_simscape_suspension_lookup` 只读取离线 CSV 并将 deg 转 rad；`interp_suspension_lookup` 接收 mm jounce，返回 camber、toe、Motion Ratio 和 damper stroke。默认禁止越界；只有显式 `OutOfRange="clamp"` 才钳位。缺少 lookup 时 `make_constant_suspension` 返回 `motion_ratio=NaN`。截至 V1.0，悬架 lookup 不改变 GGV。
+TSAC、电池和逆变器的母线电流是 DC A；电机/逆变器相电流是 `phase Arms`，二者不可直接比较或互换。
 
-## 7DOF 与高级轮胎适配
+## `result.energy`
 
-`tire.model_type` 描述 QSS/GGV 包络；`tire.slip_force.model_type` 描述 7DOF 滑移—力本构，二者不能互相冒充。`external_adapter` 是无状态、确定性的稳态代数接口，不是松弛长度状态模型。详细 schema、坐标、轮胎侧、压力和有效域规则见 [tire_adapter.md](tire_adapter.md)。
+精确段字段为 `segment_ax_mps2, segment_speed_mean_mps, segment_drive_force_N, segment_wheel_power_W, segment_tsac_power_W, segment_energy_ts_kWh, segment_energy_stored_kWh`。`cumulative_energy_ts_kWh` 与 `cumulative_energy_stored_kWh` 长度均为 `Nsegment+1`，首项固定为 0。汇总字段为：
 
-理论 GGV 的 `tire_envelope_provenance` 排除 `slip_force`，因为该本构不参与 QSS 包络生成，且 evaluator 句柄不可稳定序列化。
+```text
+E_lap_ts_kWh, E_lap_stored_kWh, E_endurance_stored_kWh,
+E_nominal_required_kWh, SOC_end_estimated,
+can_finish_endurance_estimated
+```
+
+闭环能量包含最后 `N→1` 段。通用耐久储能需求为单圈储能侧能量乘 `models.endurance.num_laps * models.endurance.safety_factor`，再除以 `SOC_init-SOC_min` 得到 `E_nominal_required_kWh`；正式示例传入 `26` 和 `1.10`。
+
+## 分析与绘图接口
+
+DOE 的 `inverter_power_W -> models.powertrain.inverter.P_dc_peak_W`，`gear_ratio -> models.powertrain.gear_ratio`；flat powertrain 扫描已退役。任何 `rules.*` 变更报 `QSSLTS:AnalysisRulesImmutable`。
+
+`plot_track_speed_map(result)`、`plot_powertrain_energy_result(result)` 与 `plot_ggv_surface(result)` 都是 result-only API；图中的 80 kW/500 A 线是冻结的 FSG rule reference，不是从可变 `rules` 动态生成的设计参数。
+
+三个 API 合计覆盖冻结的 14 项工程视图：
+
+1. `plot_track_speed_map`：XY 赛道按速度着色；
+2. `plot_powertrain_energy_result` 的 5x2 tiles：速度/Ax/Ay、曲率、主 limiter、14 项 active constraints、motor speed、used/available torque、TSAC used/cap/reference power、TSAC current/reference、累积单圈能量、limiter 距离占比（第 2–11 项）；
+3. `plot_ggv_surface`：GGV 加速/制动 surfaces、速度 slices、actual Ax/Ay lap overlay（第 12–14 项）。

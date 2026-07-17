@@ -178,7 +178,7 @@ present = false;
 enabled = false;
 powertrain = struct();
 if ~isfield(models, "powertrain") || isempty(models.powertrain) ...
-        || ~isCompositePowertrain(models.powertrain)
+        || isNoPowertrainSentinel(models.powertrain)
     return
 end
 present = true;
@@ -186,10 +186,14 @@ powertrain = validate_powertrain_config(models.powertrain);
 enabled = logical(powertrain.enabled);
 end
 
-function result = isCompositePowertrain(powertrain)
-markers = ["motor_count", "gear_ratio", "drivetrain_efficiency", ...
-    "motor", "battery", "inverter", "rules"];
-result = any(isfield(powertrain, cellstr(markers)));
+function result = isNoPowertrainSentinel(powertrain)
+names = string(fieldnames(powertrain));
+isEmpty = isempty(names);
+isMinimalDisabled = isequal(names, "enabled") ...
+    && (islogical(powertrain.enabled) || isnumeric(powertrain.enabled)) ...
+    && isscalar(powertrain.enabled) ...
+    && ismember(double(powertrain.enabled), 0);
+result = isEmpty || isMinimalDisabled;
 end
 
 function validatePrebuiltPowertrainGgv( ...

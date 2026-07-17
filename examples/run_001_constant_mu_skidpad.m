@@ -8,8 +8,7 @@ models = struct();
 models.tire = tire_simple_baseline();
 models.aero = aero_baseline();
 models.aero.enabled = false;
-models.powertrain = powertrain_baseline();
-models.powertrain.enabled = false;
+models.powertrain = struct("enabled", false);
 models.brake = brake_baseline();
 
 trackFile = fullfile(projectRoot, "data", "track", ...

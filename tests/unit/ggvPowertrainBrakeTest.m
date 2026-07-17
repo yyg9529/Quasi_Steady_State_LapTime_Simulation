@@ -10,35 +10,38 @@ classdef ggvPowertrainBrakeTest < matlab.unittest.TestCase
     end
 
     methods (Test)
-        function testTorqueAndPowerLimitersAppear(testCase)
+        function testCompositeLimitersPropagateToGgv(testCase)
             vehicle = vehicle_baseline();
-            vehicle.drivetrain.layout = "AWD";
             tire = tire_simple_baseline();
-            tire.mu_x = 5;
-            powertrain = powertrain_baseline();
-            powertrain.layout = "AWD";
+            tire.mu_x = 100;
+            powertrain = powertrain_emrax228_hvcc_demo();
+            highSpeed_mps = 4500 * 2 * pi / 60 ...
+                * tire.rolling_radius_m / powertrain.gear_ratio;
             options = default_qss_options();
-            options.v_grid_mps = [1; 30];
+            options.v_grid_mps = [1; highSpeed_mps];
             options.ay_grid_g = [-0.1, 0, 0.1];
+            lowCapability = evaluate_powertrain_constraints( ...
+                1, tire, powertrain, powertrain.battery.V_bus_assumed_V);
+            highCapability = evaluate_powertrain_constraints( ...
+                highSpeed_mps, tire, powertrain, ...
+                powertrain.battery.V_bus_assumed_V);
 
             ggv = generate_model_ggv(vehicle, tire, struct("enabled", false), ...
                 powertrain, brake_baseline(), options);
 
-            testCase.verifyEqual(ggv.accel_limiter(1, 2), "torque");
-            testCase.verifyEqual(ggv.accel_limiter(2, 2), "power");
+            testCase.verifyEqual(ggv.accel_limiter(1, 2), ...
+                lowCapability.limiter);
+            testCase.verifyEqual(ggv.accel_limiter(2, 2), ...
+                highCapability.limiter);
         end
 
         function testAwdHasMoreLowSpeedTractionThanRwd(testCase)
             rwdVehicle = vehicle_baseline();
             awdVehicle = rwdVehicle;
             awdVehicle.drivetrain.layout = "AWD";
-            rwdPowertrain = powertrain_baseline();
+            rwdPowertrain = powertrain_emrax228_hvcc_demo();
             awdPowertrain = rwdPowertrain;
             awdPowertrain.layout = "AWD";
-            rwdPowertrain.max_total_wheel_torque_Nm = inf;
-            awdPowertrain.max_total_wheel_torque_Nm = inf;
-            rwdPowertrain.max_power_W = inf;
-            awdPowertrain.max_power_W = inf;
             options = default_qss_options();
             options.v_grid_mps = [0; 1];
             options.ay_grid_g = [-0.1, 0, 0.1];

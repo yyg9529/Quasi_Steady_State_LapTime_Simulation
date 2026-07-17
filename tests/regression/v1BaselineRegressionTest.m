@@ -50,11 +50,7 @@ classdef v1BaselineRegressionTest < matlab.unittest.TestCase
             vehicle = vehicle_baseline();
             tire = tire_simple_baseline();
             aero = struct("enabled", false);
-            powertrain = powertrain_baseline();
-            powertrain.max_power_W = inf;
-            powertrain.max_total_wheel_torque_Nm = inf;
-            powertrain.max_speed_mps = inf;
-            powertrain.drive_efficiency = 1;
+            powertrain = powertrain_emrax228_hvcc_demo();
             brake = brake_baseline();
             brake.max_decel_g_mechanical = inf;
             brake.max_total_brake_force_N = inf;

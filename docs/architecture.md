@@ -3,38 +3,42 @@
 ## 主数据流
 
 ```text
-Vehicle / Tire / Aero / Powertrain / Brake
-                    ↓
-            Vehicle Capability (GGV)
-                    ↓
-Track curvature → closed-loop QSS propagation
-                    ↓
-LapResult / limiter / sensitivity
+track CSV + presets + options
+            |
+            v
+      read_track_csv
+            |
+            v
+ generate_model_ggv -- 每个 (v, Ay) 状态调用 calc_drive_limit / 制动与轮胎内核
+            |
+            v
+       run_qss_lap
+    lateral limit -> forward pass -> backward pass -> 速度剖面收敛后
+            |
+            +--> result.limiter / result.active_constraints
+            +--> result.powertrain
+            +--> 速度剖面收敛后计算 result.energy
+            +--> result-only plots / Sensitivity/DOE
 ```
 
-QSS core 只查询 GGV，不直接调用轮胎或 Simscape。理论 GGV 的生成属于车辆能力层；实车 GGV 只能校准该能力层。悬架几何由离线工具导出 CSV，运行时仅做读取和插值。
+`run_qss_lap` 是固定赛线主编排器。若没有预建 GGV，它调用 `generate_model_ggv`；前向和后向传播均以当前节点速度和曲率重建 `actual Ay = v^2*kappa`，并在该 Ay 处查询纵向加速或制动能力。组合动力系统下，GGV 和圈速后处理使用同一冻结配置，避免动力参数与预建图 provenance 不一致。
 
-## 层级依赖
+## 模块职责
 
-1. `data/` 与 `preprocessing/`：输入和边界适配；Simscape 仅在该层离线导出悬架 CSV。
-2. `src/vehicle|tire|aero|powertrain|brake`：可独立测试的物理模型。
-3. `src/ggv`：把物理模型压缩为速度相关的整车能力边界。
-4. `src/core`：固定赛线速度传播与时间积分。
-5. `src/analysis`：汇总、绘图、敏感性和 DOE。
-6. `src/dof7`：关键事件验证，不参与主圈速求解。
+- `preprocessing/track`：赛道输入，负责 schema、单位、闭环弧长与 provenance。
+- `src/vehicle`、`src/tire`、`src/aero`：车辆状态、四轮载荷、轮胎包络和气动力。
+- `src/powertrain`：组合动力配置校验、600 V 电机包络、电池/逆变器/规则候选约束、逐点使用量和能量。
+- `src/ggv`：在速度/横向加速度网格上生成或插值 GGV；`plot_ggv_surface` 只消费 result。
+- `src/core`：固定赛线速度传播、圈时积分、active constraint 分类和求解收敛诊断。
+- `src/analysis`：Sensitivity/DOE、limiter 汇总和 result-only 工程图。
+- `data/` 各模型目录：车辆、轮胎、气动、动力和制动的可复现配置。
 
-`reference/` 是冻结快照，生产代码不得将其加入路径或在运行时读取其中资产。
+`models.endurance` 是独立于 `models.powertrain` 的重复圈配置，只含圈数和安全系数。能量仅在速度剖面收敛后后处理，不进入 GGV 生成，也不反向限制本圈速度。
 
-V0.7 的悬架层只提供几何 lookup 数据通道。把轮荷转换为 jounce 还需要弹簧、ARB、静态参考与垂向平衡模型；这些尚未实现，因此当前 GGV 生成器不会调用悬架 lookup。
+## 闭环与收敛
 
-## 闭环求解更正
+闭环赛道以 `N` 个唯一节点和 `N` 个段表示；第 `N` 段是精确 `N → 1` 闭合段。前向/后向传播循环处理闭合边界，直至速度剖面变化低于容差；圈时、能量和距离加权 limiter 统计均包含最后一段。开环为 `N` 节点、`N-1` 段。
 
-圈速赛道是周期边界问题。单次 forward/backward 会依赖数组起点，并可能漏掉末点到首点的约束。本项目把每个节点到下一节点（含 `N → 1`）视为一段，反复施加加速与制动可达性约束，直到速度剖面成为周期不动点。
+## 依赖方向与禁止项
 
-时间积分使用每段常加速度恒等式：
-
-```text
-dt_i = 2 ds_i / (v_i + v_{i+1})
-```
-
-而不是左端点近似 `ds_i / v_i`。
+主线依赖从输入/预设流向物理内核、GGV、圈速与分析；绘图不回调求解器，不允许用图形函数重算或修改结果。DOE 只复制并修改分析参数，规则对象保持冻结；若尝试更改 `rules.*`，应报 `QSSLTS:AnalysisRulesImmutable`。主线不再依赖专属瞬态 DOF 目录或适配器。

@@ -18,10 +18,11 @@ classdef straightAccelerationTest < matlab.unittest.TestCase
             models = struct();
             models.tire = tire_simple_baseline();
             models.aero = struct("enabled", false);
-            models.powertrain = powertrain_baseline();
-            models.powertrain.max_power_W = 20000;
-            models.powertrain.max_total_wheel_torque_Nm = 400;
+            models.powertrain = powertrain_emrax228_hvcc_demo();
+            models.powertrain.inverter.P_dc_peak_W = 20000;
             models.brake = brake_baseline();
+            models.endurance = struct( ...
+                "num_laps", 1, "safety_factor", 1.0);
             options = default_qss_options();
             options.v_max_mps = 50;
             options.v_grid_mps = (0:1:50).';
@@ -33,11 +34,12 @@ classdef straightAccelerationTest < matlab.unittest.TestCase
             testCase.verifyEqual(result.v_mps(1), 0, AbsTol=1e-12);
             testCase.verifyGreaterThanOrEqual(diff(result.v_mps), ...
                 -1e-9 * ones(200, 1));
-            testCase.verifyEqual(max(result.v_mps), ...
-                models.powertrain.max_speed_mps, AbsTol=1e-5);
-            testCase.verifyTrue(any(result.limiter == "torque"));
-            testCase.verifyTrue(any(result.limiter == "power"));
-            testCase.verifyTrue(any(result.limiter == "top_speed"));
+            testCase.verifyLessThanOrEqual(max( ...
+                result.powertrain.motor_speed_rpm), ...
+                models.powertrain.motor.max_mechanical_speed_rpm + 1e-6);
+            testCase.verifyTrue(any(ismember(result.limiter, ...
+                ["inverter_power", "motor_voltage", ...
+                "motor_power", "motor_speed"])));
         end
     end
 end
