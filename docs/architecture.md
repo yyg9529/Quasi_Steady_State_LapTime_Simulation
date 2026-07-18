@@ -26,12 +26,12 @@ track CSV + presets + options
 ## 模块职责
 
 - `preprocessing/track`：赛道输入，负责 schema、单位、闭环弧长与 provenance。
-- `preprocessing/tire`：只做 PAC2002 标量解析与 QSS 离线降阶；生产求解器不读取 `reference/`。
-- `src/vehicle`、`src/tire`、`src/aero`：车辆状态、四轮载荷、轮胎包络和气动力。
+- `preprocessing/tire`：解析完整 PAC2002 标量树并提供 QSS 离线降阶；`load_pac2002_tire` 只供独立 handling 分支加载本地 `.tir`。
+- `src/vehicle`、`src/tire`、`src/aero`：车辆状态、四轮载荷、QSS 轮胎包络、完整 PAC2002 稳态 evaluator 和气动力。
 - `src/powertrain`：组合动力配置校验、600 V 电机包络、电池/逆变器/规则候选约束、逐点使用量和能量。
 - `src/ggv`：在速度/横向加速度网格上生成或插值 GGV；`plot_ggv_surface` 只消费 result。
 - `src/core`：固定赛线速度传播、圈时积分、active constraint 分类和求解收敛诊断。
-- `src/analysis`：Sensitivity/DOE、limiter 汇总和 result-only 工程图。
+- `src/analysis`：Sensitivity/DOE、limiter 汇总、四轮 YMD、固定半径稳态与 Understeer Gradient。
 - `data/` 各模型目录：车辆、轮胎、气动、动力和制动的可复现配置。
 
 `models.endurance` 是独立于 `models.powertrain` 的重复圈配置，只含圈数和安全系数。能量仅在速度剖面收敛后后处理，不进入 GGV 生成，也不反向限制本圈速度。
@@ -42,4 +42,4 @@ track CSV + presets + options
 
 ## 依赖方向与禁止项
 
-主线依赖从输入/预设流向物理内核、GGV、圈速与分析；绘图不回调求解器，不允许用图形函数重算或修改结果。DOE 只复制并修改分析参数，规则对象保持冻结；若尝试更改 `rules.*`，应报 `QSSLTS:AnalysisRulesImmutable`。主线不再依赖专属瞬态 DOF 目录或适配器。
+主线依赖从输入/预设流向物理内核、GGV、圈速与分析；绘图不回调求解器，不允许用图形函数重算或修改结果。DOE 只复制并修改分析参数，规则对象保持冻结；若尝试更改 `rules.*`，应报 `QSSLTS:AnalysisRulesImmutable`。完整 PAC2002 四轮 handling 是旁路分析模块；`run_qss_lap` 与 `generate_model_ggv` 不得依赖它，避免改变既有圈速模型范围。

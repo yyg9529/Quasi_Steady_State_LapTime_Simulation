@@ -6,8 +6,7 @@
 
 - 当前验收环境：Windows、MATLAB R2026a；核心运行只依赖基础 MATLAB。
 - 内部使用 SI 单位，车辆坐标为 `X` 前、`Y` 左、`Z` 上。
-- `reference/` 是本地参考目录、被 Git 忽略且不进入生产运行路径。
-- 真实赛道 `data/track/tianji_kart_QSS_track_closed.csv` 保持本地未跟踪，不随仓库分发；正式示例不提供替代赛道或静默回退。
+- 真实赛道 `data/track/tianji_kart_QSS_track_closed.csv` 作为正式验证输入随仓库正式分发；正式示例不提供替代赛道或静默回退。
 - 模型是固定赛线 QSS，不包含自由赛线、驾驶员模型、全赛道瞬态整车或热状态模型。
 
 ## 正式入口
@@ -26,13 +25,22 @@ run(fullfile(projectRoot, "examples", ...
 
 规则基线是 Formula Student Rules 2026 v1.1 的 600 V、80 kW、正向 +500 A 限制；EMRAX 数据表点为 `104 kW@4500 rpm` 且约需 830 V，故正式示例在 600 V 下采用文档所述的保守降额包络。
 
-2026 实车输入目前只确认轴距 `1.560 m`，见 [FS 2026 车辆输入](docs/fs_2026_vehicle_inputs.md)。Hoosier PAC2002 文件只用于离线降阶；有效滚动半径、目标最高车速、实车传动比和制动计算表尚未确认，因此当前正式入口仍是概念基准，不能解释为 2026 最终实车结果。
+2026 实车输入目前只确认轴距 `1.560 m`，见 [FS 2026 车辆输入](docs/fs_2026_vehicle_inputs.md)。Hoosier PAC2002 既可离线降阶供圈速/GGV 主线使用，也可由独立四轮 handling 分支直接计算 YMD 与 Understeer Gradient；有效滚动半径、目标最高车速、实车传动比和制动计算表尚未确认，因此当前结果仍不能解释为 2026 最终实车结果。
+
+完整 `.tir` 不随仓库分发。将文件复制到 `data/tire/local/Hoosier_16x75_10_R20.tir` 后运行：
+
+```matlab
+project_setup();
+[handling, app] = run_four_wheel_handling_demo();
+```
+
+示例直接读取完整 PAC2002 参数，按 `[FL, FR, RL, RR]` 建立四轮模型，并把 YMD 与 Understeer 结果写入 GUI 独立的 `LastHandlingResult`。GUI 的 DOE 顶层页面同样使用独立 `LastDoeResult`，不会覆盖最近一次圈速 `LastResult`。
 
 ## 结果与可视化
 
 核心结果包括：
 
-- 圈时、速度、纵横向加速度、GGV 与求解收敛信息；
+- 圈时、速度、纵横向加速度、三维 GGV 与求解收敛信息；
 - `result.limiter` 和可多重激活的 `result.active_constraints`；
 - `result.powertrain` 的电机、轮端、TSAC、电池和逆变器逐点量；
 - `result.energy` 的单圈能量、重复圈耐久估计、SOC 与容量可行性。

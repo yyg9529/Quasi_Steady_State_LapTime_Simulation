@@ -18,6 +18,12 @@ classdef formalExampleDocumentationContractTest < matlab.unittest.TestCase
             testCase.verifyTrue(isfile(testCase.ExampleFile));
         end
 
+        function testTrackedTrackFileExists(testCase)
+            trackFile = fullfile(testCase.ProjectRoot, "data", "track", ...
+                "tianji_kart_QSS_track_closed.csv");
+            testCase.verifyTrue(isfile(trackFile));
+        end
+
         function testFormalExampleConfigurationContract(testCase)
             testCase.assumeTrue(isfile(testCase.ExampleFile));
             content = string(fileread(testCase.ExampleFile));
@@ -67,12 +73,13 @@ classdef formalExampleDocumentationContractTest < matlab.unittest.TestCase
             required = ["MATLAB R2026a", ...
                 "run_qss_emrax228_hvcc_energy_demo.m", ...
                 "data/track/tianji_kart_QSS_track_closed.csv", ...
-                "本地未跟踪", "reference/", "固定赛线", ...
+                "随仓库正式分发", "固定赛线", ...
                 "单圈能量", "耐久容量", ...
                 "plot_track_speed_map", ...
                 "plot_powertrain_energy_result", "plot_ggv_surface"];
 
             testCase.verifyContainsAll(content, required);
+            testCase.verifyFalse(contains(content, "本地未跟踪"));
             testCase.verifyFalse(contains(content, "独立 7DOF"));
             testCase.verifyFalse(contains(content, "能耗模型、"));
         end

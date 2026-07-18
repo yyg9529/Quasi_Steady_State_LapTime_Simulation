@@ -15,4 +15,6 @@
 
 外部 SAE J670 Z-down 数据、轮胎坐标或 Simscape 局部坐标必须在适配器中转换，不允许在核心函数里隐式换号。
 
-高级轮胎 evaluator 的输出统一为轮胎局部 `+X` 前、`+Y` 左。具体外部模型 wrapper 负责输入/输出转换；`convert_tire_force_to_internal` 可把 SAE J670 `+Y` 右的 `Fx/Fy` 转为内部符号。generic adapter 不再二次换号。
+高级轮胎 evaluator 的输入/输出统一为轮胎局部 `+X` 前、`+Y` 左；内部侧偏角定义为 `alpha=atan2(-Vy_tire,Vx_tire)`，因此正 `alpha` 必须产生正 `Fy`。PAC2002 原生侧偏角符号、TIR 的 `TYRESIDE` 和右侧安装镜像全部封装在 `evaluate_pac2002_tire` 边界中，四轮求解器不得再次换号。
+
+四轮位置以质心为原点，顺序固定 `[FL, FR, RL, RR]`。设质心到前轴为 `a`、到后轴为 `b`，则位置为 `[(a,+tf/2),(a,-tf/2),(-b,+tr/2),(-b,-tr/2)]`。正横摆角速度下，接地点车体速度使用 `Vx=u-r*y`、`Vy=v+r*x`；轮胎力转回车体后，质心横摆力矩为 `sum(x*Fy-y*Fx+Mz)`。

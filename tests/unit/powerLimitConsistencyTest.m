@@ -118,11 +118,11 @@ classdef powerLimitConsistencyTest < matlab.unittest.TestCase
                 + options.accel_tolerance_mps2);
         end
 
-        function testRealTrackPowerCapLocal(testCase)
+        function testRealTrackPowerCap(testCase)
             trackFile = fullfile(testCase.ProjectRoot, "data", "track", ...
                 "tianji_kart_QSS_track_closed.csv");
-            testCase.assumeTrue(isfile(trackFile), ...
-                "The local-only Tianji validation track is unavailable.");
+            testCase.verifyTrue(isfile(trackFile), ...
+                "The tracked Tianji validation track is unavailable.");
             track = read_track_csv(trackFile);
             [vehicle, models, options] = ...
                 powerLimitConsistencyTest.makeConceptConfiguration();

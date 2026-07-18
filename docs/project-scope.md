@@ -13,10 +13,11 @@
 - `result.limiter` 主约束与 `result.active_constraints` 多约束诊断。
 - 单圈能量、按相同最小圈速度剖面重复的耐久容量估算。
 - Sensitivity/DOE：直接扫描 `inverter_power_W` 和 `gear_ratio`，不得修改 `rules.*`。
-- 结果后处理：赛道速度图、动力/能量图、GGV 曲面图。
-- `s_m,x_m,y_m,curvature_1_m,track_width_m` 真实 geometry CSV 的精确弧长闭环读取；真实文件保持 local-untracked，`reference/` 保持本地 Git ignored。
+- 结果后处理：赛道速度图、动力/能量图、三维 GGV 曲面图。
+- `s_m,x_m,y_m,curvature_1_m,track_width_m` 真实 geometry CSV 的精确弧长闭环读取；真实文件随仓库正式分发。
 - 2026 车辆预设已确认轴距 `1.560 m`；其他继承车辆参数仍为 provisional。
-- Hoosier PAC2002 只在离线预处理中降阶为当前 QSS 轮胎包络，不把完整 MF-Tyre 引入运行时。
+- Hoosier PAC2002 有两条隔离路径：圈速/GGV 主线继续只使用离线降阶轮胎包络；独立 handling 分支可在运行时读取完整 `.tir`，计算四轮稳态力/力矩、YMD 与 Understeer Gradient。
+- GUI 分别保存圈速 `LastResult`、DOE `LastDoeResult` 和 handling `LastHandlingResult`，三者互不覆盖。
 
 ## 明确不在范围内
 

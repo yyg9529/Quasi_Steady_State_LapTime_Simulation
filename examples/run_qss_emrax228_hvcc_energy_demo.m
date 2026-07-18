@@ -1,6 +1,6 @@
 %% EMRAX 228 / HVCC fixed-raceline QSS energy demonstration
-% The Tianji CSV is local-only project input. This example intentionally has
-% no fallback track: read_track_csv reports the missing-input error directly.
+% The Tianji CSV is a version-controlled project input. This example has no
+% fallback track: read_track_csv reports a missing-input error directly.
 
 projectRoot = fileparts(fileparts(mfilename("fullpath")));
 addpath(projectRoot);

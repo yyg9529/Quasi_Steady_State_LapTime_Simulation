@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif;
+      --ink: #09232a;
+      --muted: #4f6a70;
+      --teal: #00b0ac;
+      --teal-dark: #007d7d;
+      --red: #e32b43;
+      --gold: #ed961f;
+    }
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+    body {
+      position: relative;
+      padding: 3px;
+      background:
+        radial-gradient(circle at 5% -35%, rgba(0, 213, 204, .34), transparent 49%),
+        radial-gradient(circle at 100% 150%, rgba(227, 43, 67, .12), transparent 42%),
+        linear-gradient(135deg, #d9f0f1 0%, #eef8f8 48%, #dbeff0 100%);
+    }
+    body::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(115deg, transparent 10%, rgba(255,255,255,.62) 35%, transparent 57%);
+      pointer-events: none;
+    }
+    .grid {
+      position: relative;
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px;
+      height: 100%;
+    }
+    .card {
+      position: relative;
+      min-width: 0;
+      padding: 18px 19px 14px;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, .88);
+      border-radius: 21px;
+      background:
+        linear-gradient(145deg, rgba(255,255,255,.76), rgba(221,246,246,.44));
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.95),
+        inset 0 -1px 0 rgba(0,125,125,.08),
+        0 12px 28px rgba(3, 57, 65, .13);
+      backdrop-filter: blur(22px) saturate(145%);
+      -webkit-backdrop-filter: blur(22px) saturate(145%);
+    }
+    .card::before {
+      content: "";
+      position: absolute;
+      top: -56px;
+      right: -38px;
+      width: 125px;
+      height: 125px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 35%, rgba(255,255,255,.92), rgba(0,176,172,.16) 42%, transparent 70%);
+      filter: blur(1px);
+    }
+    .card::after {
+      content: "";
+      position: absolute;
+      left: 13px;
+      right: 13px;
+      top: 7px;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,.98), transparent);
+    }
+    .accent {
+      position: absolute;
+      left: 0;
+      top: 22px;
+      width: 3px;
+      height: 42px;
+      border-radius: 0 5px 5px 0;
+      background: linear-gradient(180deg, #36f1e6, var(--teal-dark));
+      box-shadow: 0 0 12px rgba(0,176,172,.55);
+    }
+    .status .accent {
+      background: linear-gradient(180deg, var(--gold), var(--red));
+      box-shadow: 0 0 12px rgba(227,43,67,.35);
+    }
+    .eyebrow {
+      position: relative;
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 750;
+      letter-spacing: .105em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+    .value {
+      position: relative;
+      margin-top: 9px;
+      color: var(--ink);
+      font-size: 29px;
+      font-weight: 760;
+      line-height: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      text-shadow: 0 1px 0 rgba(255,255,255,.8);
+    }
+    .unit { color: var(--muted); font-size: 12px; font-weight: 600; }
+    .meta {
+      position: relative;
+      margin-top: 9px;
+      color: var(--muted);
+      font-size: 10px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .pill {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 10px;
+      padding: 5px 10px;
+      color: #71320a;
+      background: rgba(255, 230, 183, .68);
+      border: 1px solid rgba(255,255,255,.78);
+      border-radius: 999px;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.8);
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: .05em;
+    }
+    .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--red);
+      box-shadow: 0 0 8px rgba(227,43,67,.5);
+    }
+  </style>
+</head>
+<body>
+  <div class="grid">
+    <section class="card">
+      <span class="accent"></span>
+      <div class="eyebrow">Lap time</div>
+      <div class="value"><span id="lapTime">—</span> <span class="unit">s</span></div>
+      <div class="meta">固定赛线单圈时间</div>
+    </section>
+    <section class="card">
+      <span class="accent"></span>
+      <div class="eyebrow">Maximum speed</div>
+      <div class="value"><span id="maxSpeed">—</span> <span class="unit">m/s</span></div>
+      <div class="meta">速度剖面最大值</div>
+    </section>
+    <section class="card">
+      <span class="accent"></span>
+      <div class="eyebrow">Lap energy</div>
+      <div class="value"><span id="lapEnergy">—</span> <span class="unit">kWh</span></div>
+      <div class="meta">储能侧单圈能量</div>
+    </section>
+    <section class="card status">
+      <span class="accent"></span>
+      <div class="eyebrow">Solver status</div>
+      <div class="value" id="convergence" style="font-size:20px; margin-top:12px">尚未运行</div>
+      <div class="pill"><span class="dot"></span> SOLVER CONNECTED</div>
+    </section>
+  </div>
+  <script>
+    function render(data) {
+      if (!data) return;
+      ["lapTime", "maxSpeed", "lapEnergy", "convergence"].forEach(function (key) {
+        if (data[key] !== undefined) document.getElementById(key).textContent = data[key];
+      });
+    }
+    function setup(htmlComponent) {
+      render(htmlComponent.Data);
+      htmlComponent.addEventListener("DataChanged", function () {
+        render(htmlComponent.Data);
+      });
+    }
+  </script>
+</body>
+</html>

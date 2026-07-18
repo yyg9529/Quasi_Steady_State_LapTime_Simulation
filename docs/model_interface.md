@@ -21,7 +21,7 @@
 
 reader 保留字段为 `s_m, ds_m, kappa_1pm, x_m, y_m, track_width_m, is_closed, closure_is_estimated, length_m, source_file`。
 
-本地真实文件 `data/track/tianji_kart_QSS_track_closed.csv` 不进入 Git。维护者本地验收目标约为总长 `857.461445744691` m、闭合段 `1.461445744691` m；这些值是保护性检查，不表示该文件随仓库提供。
+真实文件 `data/track/tianji_kart_QSS_track_closed.csv` 是进入 Git 并随仓库提供的正式验证输入。验收目标约为总长 `857.461445744691` m、闭合段 `1.461445744691` m；这些值用于保护文件内容和闭环几何契约。
 
 ## 组合动力系统输入
 
@@ -40,6 +40,14 @@ drivetrain_efficiency, motor, battery, inverter, rules
 - 启用配置缺字段或只使用扁平 `max_power_W/max_wheel_torque` 配置时拒绝，并报 `QSSLTS:PowertrainConfig`。
 
 `rules` 冻结 Formula Student Rules 2026 v1.1 的 `max_ts_voltage_V=600`、`max_ts_power_W=80000`、`max_ts_current_A=500` 与 `regen_enabled_in_model=false`。DOE 不得通过改变规则来模拟部件设计变化。
+
+## 完整 PAC2002 四轮 handling
+
+`load_pac2002_tire(tirFile)` 保留完整 section、SHA-256、模型侧和输入范围，并返回可直接传入四轮求解器的 `tireModel.evaluate`。四轮轮位顺序固定为 `[FL, FR, RL, RR]`；调用输入至少包括 `Fz_N,kappa,alpha_rad,gamma_rad,turn_slip_1pm,Vx_mps,mount_side`，输出包括 `Fx_N,Fy_N,Mx_Nm,My_Nm,Mz_Nm,effective_radius_m,within_range`。
+
+`generate_ymd` 在固定 `speed/beta/steer` 网格上求横向力平衡对应的 yaw rate，保留非零质心横摆力矩；`solve_steady_state_cornering` 在固定速度/半径下同时求解横向力与横摆力矩平衡；`calc_understeer_gradient` 输出经典小角度线性化 `linear_fit_gradient_deg_per_g`，以及有限半径真实四轮曲线的 `steady_curve_gradient_deg_per_g` 和 `local_gradient_deg_per_g`。正值表示 understeer，负值表示 oversteer。
+
+完整 PAC2002 handling 是稳态模型，不包含 relaxation dynamics。原始 `.tir` 位于忽略的 `data/tire/local/`，不作为仓库分发资产；圈速/GGV 主线仍只使用降阶包络。
 
 ## GGV 与耐久输入
 

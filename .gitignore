@@ -14,8 +14,8 @@ test-results/
 results/
 *.log
 
-# Local reference material
-reference/
+# Local proprietary tire property files
+data/tire/local/
 
 # Local editor and operating-system files
 .vscode/

@@ -48,5 +48,21 @@ classdef qssScopeTest < matlab.unittest.TestCase
 
             testCase.verifyFalse(contains(sourceText, "slip_force"));
         end
+
+        function test_lap_and_ggv_remain_independent_of_handling_model(testCase)
+            projectRoot = fileparts(fileparts(fileparts(mfilename("fullpath"))));
+            lapSource = fileread(fullfile(projectRoot, "src", ...
+                "core", "run_qss_lap.m"));
+            ggvSource = fileread(fullfile(projectRoot, "src", ...
+                "ggv", "generate_model_ggv.m"));
+            combinedSource = string(lapSource) + newline + string(ggvSource);
+            handlingFunctions = ["evaluate_pac2002_tire", ...
+                "evaluate_four_wheel_state", "generate_ymd", ...
+                "solve_steady_state_cornering", ...
+                "calc_understeer_gradient"];
+
+            testCase.verifyFalse(any(contains( ...
+                combinedSource, handlingFunctions)));
+        end
     end
 end

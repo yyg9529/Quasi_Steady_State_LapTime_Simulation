@@ -6,7 +6,7 @@
 
 电机源为 EMRAX 228 datasheet v1.6（`https://emrax.com/wp-content/uploads/2025/03/EMRAX_228_datasheet_v1.6.pdf`）的 HV combined-cooling 数据。数据表额定点包括 `104 kW@4500 rpm`，实现以约 `830 V` 作为达到该峰值功率所需电压；还保留 220 Nm 峰值转矩、6500 rpm 机械转速上限和 phase Arms 数据。75 kW 连续功率与 130 Nm 连续转矩只作为指定 combined-cooling 边界下的诊断数据；没有热模型时不能据此给出热可行性结论。数据表没有提供本项目所需的完整 600 V 转矩-转速图，因此下面的 600 V 包络是保守工程推断，不是供应商认证曲线。
 
-正式示例 `powertrain_emrax228_hvcc_demo` 的工程假设为：单电机 RWD；`gear_ratio=4.369334602435052` 与 `tire.rolling_radius_m=0.2286` m 将 120 km/h 映射到约 6084 rpm；传动效率 0.90、电机效率 0.94。电池参数为 `V_max/V_nominal/V_min/V_bus=600/540/450/600 V`、8 kWh、`SOC_init=0.95`、`SOC_min=0.10`、100 kW/300 A 峰值、放电效率 0.98 和 500 W TS auxiliary。逆变器假设为 600 V、100 kW、300 DC A、250 phase Arms、效率 0.97。Formula Student Rules 2026 v1.1 `D7.1.3` 给出约 22 km 耐久距离；除以本地赛道约 0.857461 km 得 25.66 圈，故取 26 圈；1.10 是显式工程安全系数。它不代表实际赛车的已确认硬件。
+正式示例 `powertrain_emrax228_hvcc_demo` 的工程假设为：单电机 RWD；`gear_ratio=4.369334602435052` 与 `tire.rolling_radius_m=0.2286` m 将 120 km/h 映射到约 6084 rpm；传动效率 0.90、电机效率 0.94。电池参数为 `V_max/V_nominal/V_min/V_bus=600/540/450/600 V`、8 kWh、`SOC_init=0.95`、`SOC_min=0.10`、100 kW/300 A 峰值、放电效率 0.98 和 500 W TS auxiliary。逆变器假设为 600 V、100 kW、300 DC A、250 phase Arms、效率 0.97。Formula Student Rules 2026 v1.1 `D7.1.3` 给出约 22 km 耐久距离；除以仓库内 Tianji 赛道约 0.857461 km 得 25.66 圈，故取 26 圈；1.10 是显式工程安全系数。它不代表实际赛车的已确认硬件。
 
 ## 保守 600 V 电机 T-N 包络
 
@@ -95,7 +95,7 @@ E_nominal_required = E_endurance_stored / (SOC_init-SOC_min)
 
 ## P1 旧参数数值基线
 
-使用同一概念车辆/轮胎/制动/EMRAX-HVCC 参数和本地 Tianji 闭合赛道，仅改变分段可达性离散，R2026a 结果为：
+使用同一概念车辆/轮胎/制动/EMRAX-HVCC 参数和仓库内 Tianji 闭合赛道，仅改变分段可达性离散，R2026a 结果为：
 
 | 指标 | 修复前 | P1 修复后 | 变化 |
 |---|---:|---:|---:|

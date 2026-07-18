@@ -161,35 +161,12 @@ classdef pac2002TirReductionTest < matlab.unittest.TestCase
                 "tire_hoosier_16x75_10_r20_qss:UnvalidatedRollingRadius");
         end
 
-        function test_no_runtime_reference_dependency(testCase)
+        function test_no_runtime_source_file_dependency(testCase)
             sourceText = fileread(which( ...
                 "tire_hoosier_16x75_10_r20_qss"));
 
-            testCase.verifyFalse(contains(lower(sourceText), "reference"));
             testCase.verifyFalse(contains(lower(sourceText), "fileread"));
             testCase.verifyFalse(contains(lower(sourceText), ".tir"));
-        end
-
-        function test_real_hoosier_tir_when_available(testCase)
-            tirPath = fullfile(testCase.ProjectRoot, "reference", ...
-                "FSAE-VD-Personal-Scripts-main", ...
-                "FSAE-VD-Personal-Scripts-clean", "Yaw Dynamics", ...
-                "Tire Model", "Hoosier_16x75_10_R20.tir");
-            testCase.assumeTrue(isfile(tirPath), ...
-                "Local-only Hoosier TIR is unavailable.");
-
-            parsed = read_pac2002_tir(tirPath);
-            reduced = derive_qss_tire_parameters(parsed);
-
-            testCase.verifyEqual(parsed.source.sha256, ...
-                "6AB8AA1219B7910A1660966AAD1B6C8FC7EF2FDB46F40BF0FA9B6FC172E53A2A");
-            testCase.verifyEqual(reduced.Fz_ref_N, 667, AbsTol=1e-12);
-            testCase.verifyEqual(reduced.mu_x_ref, 1.334655, AbsTol=1e-12);
-            testCase.verifyEqual(reduced.mu_y_ref, 1.804320, AbsTol=1e-12);
-            testCase.verifyEqual(reduced.load_sensitivity_x, ...
-                -0.0168396327140722, AbsTol=1e-12);
-            testCase.verifyEqual(reduced.load_sensitivity_y, ...
-                -0.0693256185155627, AbsTol=1e-12);
         end
     end
 
