@@ -13,7 +13,12 @@ end
 totalDistance_m = sum(weights_m);
 limiter = string(result.limiter(:));
 
-summary.lap_time_s = result.lap_time_s;
+summary.path_time_s = result.lap_time_s;
+if isfield(result, "event") && isfield(result.event, "scored_time_s")
+    summary.lap_time_s = result.event.scored_time_s;
+else
+    summary.lap_time_s = result.lap_time_s;
+end
 summary.max_speed_mps = max(result.v_mps);
 summary.max_ax_g = max(result.ax_mps2) / gravity_mps2;
 summary.max_brake_g = max(0, -min(result.ax_mps2) / gravity_mps2);

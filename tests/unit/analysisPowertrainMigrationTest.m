@@ -49,6 +49,21 @@ classdef analysisPowertrainMigrationTest < matlab.unittest.TestCase
     end
 
     methods (Test)
+        function testOptionalHandlingFailurePreservesLapResult(testCase)
+            handlingConfig = struct( ...
+                "enabled", true, ...
+                "tir_file", string(tempname) + ".tir", ...
+                "failure_policy", "report_unavailable");
+
+            [result, handling] = run_analysis_case( ...
+                testCase.Config, table(), handlingConfig);
+
+            testCase.verifyTrue(result.solver.converged);
+            testCase.verifyFalse(handling.available);
+            testCase.verifyEqual(handling.error_id, ...
+                "QSSLTS:HandlingTirMissing");
+        end
+
         function testDottedRuleFieldIsImmutable(testCase)
             action = @() apply_analysis_parameter(testCase.Config, ...
                 "models.powertrain.rules.max_ts_power_W", 70000);

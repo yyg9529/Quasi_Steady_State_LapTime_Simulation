@@ -44,20 +44,10 @@ if ~any(startsWith(source, allowedSources))
         "validated PAC2002 effective radius, or validated tire-test fit.");
 end
 
-tire.model_type = "load_sensitive";
-tire.Fz_ref_N = 667;
-tire.mu_x_ref = 1.334655;
-tire.mu_y_ref = 1.804320;
-tire.load_sensitivity_x = -0.0168396327140722;
-tire.load_sensitivity_y = -0.0693256185155627;
-tire.combined_n = 2;
+envelopeFile = fullfile(fileparts(mfilename("fullpath")), ...
+    "Hoosier_16x75_10_R20.qss-envelope.mat");
+tire = load_qss_tire_envelope(envelopeFile);
 tire.rolling_radius_m = rollingRadius.value_m;
-tire.provenance.source_tir_sha256 = ...
-    "6AB8AA1219B7910A1660966AAD1B6C8FC7EF2FDB46F40BF0FA9B6FC172E53A2A";
-tire.provenance.reduction = "offline PAC2002 zero-camber pure-slip peak mapping";
-tire.provenance.combined_n_basis = ...
-    "QSS p-norm model-reduction assumption; " + ...
-    "not directly extracted from TIR";
 tire.provenance.rolling_radius = rollingRadius;
 end
 

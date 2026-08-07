@@ -15,7 +15,10 @@ classdef QssltsApp < handle
         StatusLabel matlab.ui.control.Label
         ParameterStatusLabel matlab.ui.control.Label
         ParameterControls struct = struct()
+        TrackLengthField
+        TrackPreviewAxes
         DefaultParameterState struct = struct()
+        ActiveTirePreset (1,1) string = "tire_load_sensitive_baseline"
         KpiCards
         RunButton
         RunGauge
@@ -52,6 +55,7 @@ classdef QssltsApp < handle
         Muted = [0.310 0.410 0.455]
         Border = [0.720 0.860 0.875]
         Warning = [0.930 0.590 0.120]
+        SpeedGreen = [0.15 0.72 0.38]
     end
 
     methods
@@ -63,6 +67,8 @@ classdef QssltsApp < handle
             app.ProjectRoot = string(fileparts(fileparts( ...
                 mfilename("fullpath"))));
             app.initializeProjectPaths();
+            projectDefaults = qsslts_gui_default_state(app.ProjectRoot);
+            app.ActiveTirePreset = projectDefaults.tire_preset;
             app.createComponents();
             app.DefaultParameterState = app.getParameterState();
             app.selectPage("dashboard");
@@ -105,9 +111,9 @@ classdef QssltsApp < handle
             for name = names.'
                 state.(name) = app.ParameterControls.(name).Value;
             end
-            defaults = qsslts_gui_default_state();
+            defaults = qsslts_gui_default_state(app.ProjectRoot);
             state.vehicle_preset = defaults.vehicle_preset;
-            state.tire_preset = defaults.tire_preset;
+            state.tire_preset = app.ActiveTirePreset;
             state.aero_preset = defaults.aero_preset;
             state.brake_preset = defaults.brake_preset;
             state = validate_qsslts_gui_state(state);
@@ -145,11 +151,13 @@ classdef QssltsApp < handle
             end
 
             config = app.buildRuntimeConfig();
+            handlingConfig = app.buildHandlingConfig();
             app.beginSimulation();
             if synchronous
                 try
-                    result = run_analysis_case(config);
-                    app.finishSimulation(result);
+                    [result, handling] = run_analysis_case( ...
+                        config, table(), handlingConfig);
+                    app.finishSimulation(result, handling);
                 catch exception
                     app.failSimulation(exception, false);
                     rethrow(exception)
@@ -159,7 +167,8 @@ classdef QssltsApp < handle
 
             try
                 app.RunFuture = parfeval( ...
-                    backgroundPool, @run_analysis_case, 1, config);
+                    backgroundPool, @run_analysis_case, 2, ...
+                    config, table(), handlingConfig);
                 app.RunTimer = timer( ...
                     ExecutionMode="fixedSpacing", Period=0.25, ...
                     BusyMode="drop", ...
@@ -460,7 +469,9 @@ classdef QssltsApp < handle
             trackGrid.BackgroundColor = app.Surface;
             trackAxes = uiaxes(trackGrid, Tag="track-preview");
             app.styleAxes(trackAxes);
-            app.drawTrackPreview(trackAxes);
+            app.TrackPreviewAxes = trackAxes;
+            app.drawTrackPreview(trackAxes, ...
+                "tianji_kart_QSS_track_closed");
 
             workflowPanel = app.createCard(content, "当前工作流");
             workflowPanel.Layout.Column = 2;
@@ -508,10 +519,11 @@ classdef QssltsApp < handle
             app.createPageHeader(grid, "参数配置", ...
                 "车辆、轮胎、制动与电驱参数统一采用 SI 单位并写入版本化 JSON");
 
-            defaults = qsslts_gui_default_state();
+            defaults = qsslts_gui_default_state(app.ProjectRoot);
             scrollPanel = uipanel(grid, BorderType="none", ...
-                BackgroundColor=app.Canvas, Scrollable="on");
-            cards = uigridlayout(scrollPanel, [4 2]);
+                BackgroundColor=app.Canvas);
+            cards = uigridlayout(scrollPanel, [4 2], ...
+                Scrollable="on", Tag="parameter-cards-grid");
             cards.ColumnWidth = {"1x", "1x"};
             cards.RowHeight = {430, 430, 800, 270};
             cards.Padding = [0 0 12 0];
@@ -655,7 +667,7 @@ classdef QssltsApp < handle
                 ["Motor speed", "Motor torque", ...
                 "TSAC power / current", "Cumulative energy"], ...
                 ["电机转速", "使用与可用扭矩", ...
-                "储能系统功率和电流", "单圈累计能量"]);
+                "储能系统功率和电流", "累计能量"]);
             app.ResultAxes.ggv = app.createResultTab(tabs, ...
                 "GGV", "GGV capability", ...
                 "速度切片能力边界与实际工况点");
@@ -767,9 +779,10 @@ classdef QssltsApp < handle
                 BorderColor=app.Border, BorderWidth=1);
         end
 
-        function drawTrackPreview(app, ax)
-            trackFile = fullfile(app.ProjectRoot, "data", "track", ...
-                "tianji_kart_QSS_track_closed.csv");
+        function drawTrackPreview(app, ax, preset)
+            [sourceFile, label] = app.trackPresetInfo(preset);
+            trackFile = fullfile(app.ProjectRoot, sourceFile);
+            cla(ax);
             if isfile(trackFile)
                 track = readtable(trackFile, VariableNamingRule="preserve");
                 plot(ax, track.x_m, track.y_m, Color=app.Accent, ...
@@ -778,7 +791,8 @@ classdef QssltsApp < handle
                 scatter(ax, track.x_m(1), track.y_m(1), 52, ...
                     app.Warning, "filled");
                 hold(ax, "off");
-                title(ax, "Tianji Kart Track · 857.46 m", ...
+                length_m = track.s_m(end) - track.s_m(1);
+                title(ax, label + " · " + compose("%.2f m", length_m), ...
                     Color=app.Ink, FontWeight="bold");
                 axis(ax, "equal");
             else
@@ -827,17 +841,26 @@ classdef QssltsApp < handle
 
         function populateTrackInputs(app, panel, defaults)
             grid = app.inputGrid(panel, 5);
-            app.addDropdown(grid, 1, "track_preset", "赛道", ...
+            dropdown = app.addDropdown(grid, 1, "track_preset", "赛道", ...
                 defaults.track_preset, ...
-                "Tianji closed track", ...
-                "tianji_kart_QSS_track_closed");
+                ["Tianji closed track", ...
+                "2025 FSEC Hefei high-speed avoidance", ...
+                "2025 FSC Acceleration (75 m)", ...
+                "2025 FSC Skidpad event"], ...
+                ["tianji_kart_QSS_track_closed", ...
+                "fsec_hefei_2025_high_speed_avoidance_closed", ...
+                "fsc_2025_acceleration_open", ...
+                "fsc_2025_skidpad_event_open"]);
             app.addTextField(grid, 2, "track_source_file", "赛道文件", ...
                 defaults.track_source_file);
             app.addNumericField(grid, 3, "endurance_num_laps", ...
                 "耐久圈数", defaults.endurance_num_laps, "lap");
             app.addNumericField(grid, 4, "endurance_safety_factor", ...
                 "安全系数", defaults.endurance_safety_factor, "—");
-            app.addDisplayField(grid, 5, "闭环长度", "857.461 m");
+            app.TrackLengthField = app.addDisplayField( ...
+                grid, 5, "赛道长度", "857.461 m");
+            dropdown.ValueChangedFcn = ...
+                @(source, ~) app.applyTrackPreset(source.Value);
         end
 
         function populateVehicleInputs(app, panel, defaults)
@@ -1064,7 +1087,7 @@ classdef QssltsApp < handle
             app.ParameterControls.(key) = field;
         end
 
-        function addDropdown(app, grid, row, key, labelText, value, ...
+        function dropdown = addDropdown(app, grid, row, key, labelText, value, ...
                 items, itemsData)
             label = uilabel(grid, Text=labelText, ...
                 FontName="Microsoft YaHei UI", FontColor=app.Muted);
@@ -1081,7 +1104,7 @@ classdef QssltsApp < handle
             app.ParameterControls.(key) = dropdown;
         end
 
-        function addDisplayField(app, grid, row, labelText, value)
+        function field = addDisplayField(app, grid, row, labelText, value)
             label = uilabel(grid, Text=labelText, ...
                 FontName="Microsoft YaHei UI", FontColor=app.Muted);
             label.Layout.Row = row;
@@ -1148,11 +1171,55 @@ classdef QssltsApp < handle
 
         function applyParameterState(app, state)
             state = validate_qsslts_gui_state(state);
+            app.ActiveTirePreset = state.tire_preset;
             names = string(fieldnames(state));
             for name = names.'
                 if isfield(app.ParameterControls, name)
                     app.ParameterControls.(name).Value = state.(name);
                 end
+            end
+            app.applyTrackPreset(state.track_preset, false);
+        end
+
+        function applyTrackPreset(app, preset, applyDefaultLaps)
+            if nargin < 3
+                applyDefaultLaps = true;
+            end
+            [sourceFile, ~, enduranceLaps] = app.trackPresetInfo(preset);
+            app.ParameterControls.track_source_file.Value = sourceFile;
+            if applyDefaultLaps
+                app.ParameterControls.endurance_num_laps.Value = enduranceLaps;
+            end
+            track = read_track_csv(fullfile(app.ProjectRoot, sourceFile));
+            app.TrackLengthField.Value = compose("%.3f m", track.length_m);
+            app.drawTrackPreview(app.TrackPreviewAxes, preset);
+        end
+
+        function [sourceFile, label, enduranceLaps] = trackPresetInfo(~, preset)
+            switch string(preset)
+                case "tianji_kart_QSS_track_closed"
+                    sourceFile = ...
+                        "data/track/tianji_kart_QSS_track_closed.csv";
+                    label = "Tianji Kart Track";
+                    enduranceLaps = 26;
+                case "fsec_hefei_2025_high_speed_avoidance_closed"
+                    sourceFile = ...
+                        "data/track/fsec_hefei_2025_high_speed_avoidance_closed.csv";
+                    label = "2025 FSEC Hefei High-speed Avoidance";
+                    enduranceLaps = 1;
+                case "fsc_2025_acceleration_open"
+                    sourceFile = ...
+                        "data/track/fsc_2025_acceleration_open.csv";
+                    label = "2025 FSC Acceleration";
+                    enduranceLaps = 1;
+                case "fsc_2025_skidpad_event_open"
+                    sourceFile = ...
+                        "data/track/fsc_2025_skidpad_event_open.csv";
+                    label = "2025 FSC Skidpad Event";
+                    enduranceLaps = 1;
+                otherwise
+                    error("QSSLTS:AppTrackPreset", ...
+                        "Unknown track preset: %s", preset);
             end
         end
 
@@ -1307,6 +1374,28 @@ classdef QssltsApp < handle
             grid(ax, "on");
         end
 
+        function handlingConfig = buildHandlingConfig(app)
+            tirFile = fullfile(app.ProjectRoot, "data", "tire", ...
+                "local", "Hoosier_16x75_10_R20.tir");
+            handlingConfig.enabled = isfile(tirFile);
+            handlingConfig.tir_file = tirFile;
+            handlingConfig.failure_policy = "report_unavailable";
+            handlingConfig.message = ...
+                "PAC2002 TIR 未配置，YMD/Understeer 未评估";
+            if ~handlingConfig.enabled
+                return
+            end
+            try
+                handlingConfig.tire_model = load_pac2002_tire(tirFile);
+            catch exception
+                handlingConfig.enabled = false;
+                handlingConfig.message = ...
+                    "PAC2002 TIR 加载失败，YMD/Understeer 未评估：" ...
+                    + string(exception.message);
+                handlingConfig.error_id = string(exception.identifier);
+            end
+        end
+
         function toggleSimulation(app)
             if app.IsRunning
                 app.cancelSimulation();
@@ -1356,14 +1445,14 @@ classdef QssltsApp < handle
             app.RunFuture = [];
             app.stopRunTimer();
             try
-                result = fetchOutputs(future);
-                app.finishSimulation(result);
+                [result, handling] = fetchOutputs(future);
+                app.finishSimulation(result, handling);
             catch exception
                 app.failSimulation(exception, true);
             end
         end
 
-        function finishSimulation(app, result)
+        function finishSimulation(app, result, handling)
             summary = summarize_lap_result(result);
             app.LastResult = result;
             app.LastSummary = summary;
@@ -1371,6 +1460,13 @@ classdef QssltsApp < handle
             app.RunFuture = [];
             app.stopRunTimer();
             app.renderResult(result);
+            app.LastHandlingResult = handling;
+            if isfield(handling, "available") && handling.available
+                app.renderHandlingResult( ...
+                    handling.ymd, handling.understeer);
+            else
+                app.renderHandlingUnavailable(handling);
+            end
             app.updateKpiCards(result, summary);
 
             if result.solver.converged
@@ -1383,9 +1479,14 @@ classdef QssltsApp < handle
                 solverColor = app.Warning;
             end
             app.restoreRunControls(solverText, 100, solverColor);
+            if isfield(result, "event")
+                timeName = "赛事计时";
+            else
+                timeName = "单圈";
+            end
             app.StatusLabel.Text = sprintf( ...
-                "●  仿真完成：单圈 %.3f s · 最高车速 %.2f m/s", ...
-                summary.lap_time_s, summary.max_speed_mps);
+                "●  仿真完成：%s %.3f s · 最高车速 %.2f m/s", ...
+                timeName, summary.lap_time_s, summary.max_speed_mps);
             app.StatusLabel.FontColor = solverColor;
             app.selectPage("results");
         end
@@ -1445,31 +1546,7 @@ classdef QssltsApp < handle
         end
 
         function updateKpiCards(app, result, summary)
-            if isfield(result, "energy") ...
-                    && isfield(result.energy, "E_lap_stored_kWh")
-                lapEnergy_kWh = result.energy.E_lap_stored_kWh;
-            elseif isfield(result, "energy") ...
-                    && isfield(result.energy, "E_lap_ts_kWh")
-                lapEnergy_kWh = result.energy.E_lap_ts_kWh;
-            else
-                lapEnergy_kWh = NaN;
-            end
-            if isfinite(lapEnergy_kWh)
-                energyText = sprintf("%.3f", lapEnergy_kWh);
-            else
-                energyText = "—";
-            end
-            if result.solver.converged
-                convergenceText = sprintf("已收敛 · %d iter", ...
-                    result.solver.iterations);
-            else
-                convergenceText = sprintf("未收敛 · %d iter", ...
-                    result.solver.iterations);
-            end
-            app.KpiCards.Data = struct( ...
-                lapTime=sprintf("%.3f", summary.lap_time_s), ...
-                maxSpeed=sprintf("%.2f", summary.max_speed_mps), ...
-                lapEnergy=energyText, convergence=convergenceText);
+            app.KpiCards.Data = qsslts_kpi_data(result, summary);
         end
 
         function renderResult(app, result)
@@ -1481,7 +1558,7 @@ classdef QssltsApp < handle
 
         function renderTrackResult(app, result)
             ax = app.ResultAxes.track{1};
-            cla(ax);
+            app.resetResultAxes(ax);
             x_m = result.track.x_m(:);
             y_m = result.track.y_m(:);
             speed_mps = result.v_mps(:);
@@ -1506,28 +1583,29 @@ classdef QssltsApp < handle
 
         function renderDynamicsResult(app, result)
             ax = app.ResultAxes.dynamics{1};
-            cla(ax);
-            yyaxis(ax, "left");
-            plot(ax, result.s_m, result.v_mps, ...
-                Color=app.Accent, LineWidth=1.5, ...
-                DisplayName="Speed");
-            ylabel(ax, "Speed (m/s)");
+            app.resetResultAxes(ax);
             yyaxis(ax, "right");
-            plot(ax, result.s_m, result.ax_mps2, ...
+            axLine = plot(ax, result.s_m, result.ax_mps2, ...
                 Color=app.Warning, LineWidth=1.1, DisplayName="Ax");
             hold(ax, "on");
-            plot(ax, result.s_m, result.ay_mps2, ...
+            ayLine = plot(ax, result.s_m, result.ay_mps2, ...
                 Color=[0.89 0.17 0.26], LineWidth=1.1, ...
                 DisplayName="Ay");
-            hold(ax, "off");
             ylabel(ax, "Acceleration (m/s^2)");
+            yyaxis(ax, "left");
+            speedLine = plot(ax, result.s_m, result.v_mps, ...
+                Color=app.SpeedGreen, LineWidth=1.9, ...
+                DisplayName="Speed", Tag="result-dynamics-speed-line");
+            hold(ax, "off");
+            ylabel(ax, "Speed (m/s)");
             xlabel(ax, "Distance (m)");
             title(ax, "速度与加速度剖面");
             grid(ax, "on");
-            legend(ax, Location="best");
+            legend(ax, [speedLine axLine ayLine], ...
+                ["Speed" "Ax" "Ay"], Location="best");
 
             ax = app.ResultAxes.dynamics{2};
-            cla(ax);
+            app.resetResultAxes(ax);
             usage = summarize_limiter_usage(result);
             bars = bar(ax, usage.percent_distance, ...
                 FaceColor=app.Accent, Tag="result-limiter-share");
@@ -1545,7 +1623,7 @@ classdef QssltsApp < handle
             powertrain = result.powertrain;
 
             ax = app.ResultAxes.energy{1};
-            cla(ax);
+            app.resetResultAxes(ax);
             plot(ax, s_m, powertrain.motor_speed_rpm(:), ...
                 Color=app.Accent, LineWidth=1.25);
             xlabel(ax, "Distance (m)");
@@ -1554,7 +1632,7 @@ classdef QssltsApp < handle
             grid(ax, "on");
 
             ax = app.ResultAxes.energy{2};
-            cla(ax);
+            app.resetResultAxes(ax);
             plot(ax, s_m, powertrain.motor_torque_used_Nm(:), ...
                 Color=app.Warning, LineWidth=1.25, ...
                 DisplayName="Used");
@@ -1570,7 +1648,7 @@ classdef QssltsApp < handle
             legend(ax, Location="best");
 
             ax = app.ResultAxes.energy{3};
-            cla(ax);
+            app.resetResultAxes(ax);
             yyaxis(ax, "left");
             plot(ax, s_m, powertrain.tsac_power_used_W(:) / 1000, ...
                 Color=app.Accent, LineWidth=1.25, ...
@@ -1586,7 +1664,7 @@ classdef QssltsApp < handle
             grid(ax, "on");
 
             ax = app.ResultAxes.energy{4};
-            cla(ax);
+            app.resetResultAxes(ax);
             segmentDistance_m = [0; cumsum(result.track.ds_m(:))];
             plot(ax, segmentDistance_m, ...
                 result.energy.cumulative_energy_ts_kWh(:), ...
@@ -1594,73 +1672,214 @@ classdef QssltsApp < handle
                 Tag="result-energy-line");
             xlabel(ax, "Distance (m)");
             ylabel(ax, "Energy (kWh)");
-            title(ax, "累计单圈能量");
+            if isfield(result, "event")
+                title(ax, "累计全路径能量");
+            else
+                title(ax, "累计单圈能量");
+            end
             grid(ax, "on");
         end
 
         function renderHandlingResult(app, ymd, understeer)
             ax = app.ResultAxes.ymd{1};
-            cla(ax);
-            surfaceHandle = surf(ax, rad2deg(ymd.steer_rad), ...
-                rad2deg(ymd.beta_rad), ymd.yaw_moment_cg_Nm, ...
-                ymd.ay_mps2, EdgeColor="none", ...
-                Tag="result-ymd-surface");
-            surfaceHandle.FaceAlpha = 0.92;
-            xlabel(ax, "Road-wheel steer (deg)");
-            ylabel(ax, "Body sideslip (deg)");
-            zlabel(ax, "Yaw moment at CG (N m)");
-            title(ax, "Yaw Moment Diagram (color: Ay)");
-            view(ax, 3);
+            app.resetResultAxes(ax);
+            validYmd = optionalLogicalMask(ymd, "converged", ...
+                size(ymd.yaw_moment_cg_Nm)) ...
+                & optionalLogicalMask(ymd, "within_tire_range", ...
+                size(ymd.yaw_moment_cg_Nm));
+            yawMomentCoefficient = ymd.yaw_moment_coefficient;
+            if isfield(ymd, "ay_g")
+                lateralAcceleration_g = ymd.ay_g;
+            else
+                lateralAcceleration_g = ymd.ay_mps2 / 9.80665;
+            end
+            yawMomentCoefficient(~validYmd) = NaN;
+            lateralAcceleration_g(~validYmd) = NaN;
+            steerGrid_deg = repmat(rad2deg(ymd.steer_rad(1, :)), ...
+                size(yawMomentCoefficient, 1), 1);
+            betaGrid_deg = repmat(rad2deg(ymd.beta_rad(:, 1)), ...
+                1, size(yawMomentCoefficient, 2));
+            deltaMesh = mesh(ax, lateralAcceleration_g, ...
+                yawMomentCoefficient, zeros(size(yawMomentCoefficient)), ...
+                lateralAcceleration_g, FaceColor="none", ...
+                EdgeColor="interp", MeshStyle="column", ...
+                LineStyle="-", LineWidth=2.4, ...
+                Tag="result-ymd-delta-mesh");
+            hold(ax, "on");
+            betaMesh = mesh(ax, lateralAcceleration_g, ...
+                yawMomentCoefficient, zeros(size(yawMomentCoefficient)), ...
+                lateralAcceleration_g, FaceColor="none", ...
+                EdgeColor="interp", MeshStyle="row", ...
+                LineStyle="--", LineWidth=2.2, ...
+                Tag="result-ymd-beta-mesh");
+            for steerIndex = 1:size(yawMomentCoefficient, 2)
+                labelIndex = find(isfinite( ...
+                    lateralAcceleration_g(:, steerIndex)) ...
+                    & isfinite(yawMomentCoefficient(:, steerIndex)), ...
+                    1, "first");
+                if isempty(labelIndex)
+                    labelX = NaN;
+                    labelY = NaN;
+                else
+                    labelX = lateralAcceleration_g( ...
+                        labelIndex, steerIndex);
+                    labelY = yawMomentCoefficient( ...
+                        labelIndex, steerIndex);
+                end
+                text(ax, labelX, labelY, sprintf( ...
+                    "\\delta=%g^\\circ", steerGrid_deg(1, steerIndex)), ...
+                    Interpreter="tex", FontSize=8, ...
+                    HorizontalAlignment="right", ...
+                    VerticalAlignment="bottom", ...
+                    Color=[0.12 0.12 0.12], ...
+                    BackgroundColor=[0.98 0.99 0.99], Margin=1, ...
+                    Tag="result-ymd-delta-label");
+            end
+            for betaIndex = 1:size(yawMomentCoefficient, 1)
+                labelIndex = find(isfinite( ...
+                    lateralAcceleration_g(betaIndex, :)) ...
+                    & isfinite(yawMomentCoefficient(betaIndex, :)), ...
+                    1, "last");
+                if isempty(labelIndex)
+                    labelX = NaN;
+                    labelY = NaN;
+                else
+                    labelX = lateralAcceleration_g( ...
+                        betaIndex, labelIndex);
+                    labelY = yawMomentCoefficient( ...
+                        betaIndex, labelIndex);
+                end
+                text(ax, labelX, labelY, sprintf( ...
+                    "\\beta=%g^\\circ", betaGrid_deg(betaIndex, 1)), ...
+                    Interpreter="tex", FontSize=8, ...
+                    HorizontalAlignment="left", ...
+                    VerticalAlignment="top", ...
+                    Color=[0.12 0.12 0.12], ...
+                    BackgroundColor=[0.98 0.99 0.99], Margin=1, ...
+                    Tag="result-ymd-beta-label");
+            end
+            xline(ax, 0, "-", Color=[0.18 0.18 0.18], ...
+                LineWidth=1.15, HandleVisibility="off", ...
+                Tag="result-ymd-zero-ay");
+            yline(ax, 0, "-", Color=[0.18 0.18 0.18], ...
+                LineWidth=1.15, HandleVisibility="off", ...
+                Tag="result-ymd-zero-yaw-moment");
+            hold(ax, "off");
+            deltaMesh.DisplayName = "Constant \delta";
+            betaMesh.DisplayName = "Constant \beta";
+            xlabel(ax, "Lateral acceleration A_y (g)");
+            ylabel(ax, "Yaw moment coefficient C_N (-)");
+            zlabel(ax, "");
+            title(ax, "C_N-A_y Yaw Moment Diagram (color: A_y)");
+            view(ax, 2);
             grid(ax, "on");
-            colorbar(ax);
+            ax.XMinorGrid = "on";
+            ax.YMinorGrid = "on";
+            ax.Layer = "top";
+            box(ax, "on");
+            pbaspect(ax, [1.35 1 1]);
+            if any(validYmd, "all")
+                ayExtent_g = max(abs(lateralAcceleration_g(validYmd)));
+                yawMomentExtent = max(abs( ...
+                    yawMomentCoefficient(validYmd)));
+                if ayExtent_g > 0
+                    xlim(ax, 1.08 * [-ayExtent_g ayExtent_g]);
+                    clim(ax, [-ayExtent_g ayExtent_g]);
+                end
+                if yawMomentExtent > 0
+                    ylim(ax, 1.08 * [-yawMomentExtent yawMomentExtent]);
+                end
+            end
+            colorbarHandle = colorbar(ax);
+            colorbarHandle.Label.String = "A_y (g)";
+            legend(ax, [deltaMesh, betaMesh], ...
+                Location="northwest");
 
             ax = app.ResultAxes.understeer{1};
-            cla(ax);
-            plot(ax, understeer.ay_g, ...
-                rad2deg(understeer.roadwheel_steer_rad), "-o", ...
+            app.resetResultAxes(ax);
+            validUndersteer = optionalLogicalMask(understeer, ...
+                "converged", size(understeer.ay_g)) ...
+                & optionalLogicalMask(understeer, ...
+                "within_tire_range", size(understeer.ay_g));
+            plot(ax, understeer.ay_g(validUndersteer), ...
+                rad2deg(understeer.roadwheel_steer_rad(validUndersteer)), ...
+                "-o", ...
                 Color=app.Accent, MarkerFaceColor=app.Accent, ...
                 LineWidth=1.4, Tag="result-understeer-line");
             xlabel(ax, "Lateral acceleration (g)");
             ylabel(ax, "Road-wheel steer (deg)");
-            title(ax, sprintf("Understeer gradient: %.3f deg/g", ...
-                understeer.linear_fit_gradient_deg_per_g));
+            if isfield(understeer, "fit_available") ...
+                    && ~understeer.fit_available
+                title(ax, sprintf( ...
+                    "Understeer curve (gradient unavailable: " + ...
+                    "%d fit point(s))", understeer.fit_point_count));
+                if ~any(validUndersteer)
+                    text(ax, 0.5, 0.5, understeer.status_message, ...
+                        Units="normalized", HorizontalAlignment="center", ...
+                        Color=app.Muted, FontName="Microsoft YaHei UI", ...
+                        FontSize=12, Tag="result-understeer-unavailable");
+                end
+            else
+                title(ax, sprintf("Understeer gradient: %.3f deg/g", ...
+                    understeer.linear_fit_gradient_deg_per_g));
+            end
             grid(ax, "on");
+        end
+
+        function renderHandlingUnavailable(app, handling)
+            if isfield(handling, "message")
+                message = string(handling.message);
+            else
+                message = "PAC2002 handling analysis is unavailable.";
+            end
+            axesHandles = [app.ResultAxes.ymd; ...
+                app.ResultAxes.understeer];
+            for index = 1:numel(axesHandles)
+                ax = axesHandles{index};
+                app.resetResultAxes(ax);
+                text(ax, 0.5, 0.5, message, Units="normalized", ...
+                    HorizontalAlignment="center", Color=app.Muted, ...
+                    FontName="Microsoft YaHei UI", FontSize=12, ...
+                    Tag="result-handling-unavailable");
+            end
         end
 
         function renderGgvResult(app, result)
             ax = app.ResultAxes.ggv{1};
-            cla(ax);
+            app.resetResultAxes(ax);
             ggv = result.ggv_used;
-            axMax_g = ggv.ax_max_g;
-            axMin_g = ggv.ax_min_g;
-            axMax_g(~ggv.feasible) = NaN;
-            axMin_g(~ggv.feasible) = NaN;
-            [ayGrid_g, speedGrid_mps] = meshgrid( ...
-                ggv.ay_g, ggv.v_mps);
+            [axBoundary_g, ayBoundary_g, speedBoundary_mps] = ...
+                prepare_ggv_boundary_surface(ggv);
             hold(ax, "on");
-            surf(ax, ayGrid_g, speedGrid_mps, axMax_g, speedGrid_mps, ...
-                EdgeColor="none", FaceAlpha=0.78, ...
-                Tag="result-ggv-upper-surface", ...
-                DisplayName="Acceleration boundary");
-            surf(ax, ayGrid_g, speedGrid_mps, axMin_g, speedGrid_mps, ...
-                EdgeColor="none", FaceAlpha=0.78, ...
-                Tag="result-ggv-lower-surface", ...
-                DisplayName="Braking boundary");
-            scatter3(ax, result.ay_mps2(:) / ggv.gravity_mps2, ...
-                result.v_mps(:), ...
-                result.ax_mps2(:) / ggv.gravity_mps2, 13, ...
+            surf(ax, axBoundary_g, ayBoundary_g, speedBoundary_mps, ...
+                speedBoundary_mps, FaceAlpha=0.82, ...
+                EdgeColor=[0.15 0.25 0.28], EdgeAlpha=0.24, ...
+                Tag="result-ggv-envelope-surface", ...
+                DisplayName="GGV capability boundary");
+            scatter3(ax, result.ax_mps2(:) / ggv.gravity_mps2, ...
+                result.ay_mps2(:) / ggv.gravity_mps2, ...
+                result.v_mps(:), 13, ...
                 result.v_mps(:), "filled", ...
                 Tag="result-actual-ggv-points", ...
                 DisplayName="Actual lap");
             hold(ax, "off");
-            xlabel(ax, "Ay (g)");
-            ylabel(ax, "Speed (m/s)");
-            zlabel(ax, "Ax (g)");
+            xlabel(ax, "Ax (g)");
+            ylabel(ax, "Ay (g)");
+            zlabel(ax, "Speed (m/s)");
             title(ax, "GGV 能力边界与实际工况");
             grid(ax, "on");
-            view(ax, 3);
+            view(ax, [-38 26]);
             legend(ax, Location="best");
-            colorbar(ax);
+            colorScale = colorbar(ax);
+            colorScale.Label.String = "Speed (m/s)";
+        end
+
+        function resetResultAxes(app, ax)
+            tag = string(ax.Tag);
+            cla(ax, "reset");
+            ax.Tag = tag;
+            app.styleAxes(ax);
+            hold(ax, "on");
         end
     end
 
@@ -1673,4 +1892,12 @@ classdef QssltsApp < handle
             end
         end
     end
+end
+
+function mask = optionalLogicalMask(value, name, expectedSize)
+if isfield(value, name)
+    mask = logical(value.(name));
+else
+    mask = true(expectedSize);
+end
 end

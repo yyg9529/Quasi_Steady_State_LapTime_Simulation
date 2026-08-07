@@ -27,8 +27,8 @@ classdef plotGgvSurfaceTest < matlab.unittest.TestCase
             axesHandles = findall(fig, Type="axes");
             titleText = string(arrayfun(@(ax) ax.Title.String, ...
                 axesHandles, UniformOutput=false));
-            upperSurface = findobj(fig, Tag="ggv-upper-surface");
-            lowerSurface = findobj(fig, Tag="ggv-lower-surface");
+            envelopeSurface = findobj(fig, Tag="ggv-envelope-surface");
+            actualPoints3d = findobj(fig, Tag="actual-ggv-points-3d");
             actualPoints = findobj(fig, Tag="actual-ggv-points");
             interpolatedSlice = findobj(fig, ...
                 DisplayName="Ax max @ 15.0 m/s");
@@ -36,8 +36,20 @@ classdef plotGgvSurfaceTest < matlab.unittest.TestCase
             testCase.verifyNumElements(axesHandles, 2);
             testCase.verifyEqual(sort(titleText), ...
                 sort(["GGV Capability Surface"; "GGV Speed Slices"]));
-            testCase.verifyTrue(isnan(upperSurface.ZData(3, 1)));
-            testCase.verifyTrue(isnan(lowerSurface.ZData(3, 5)));
+            testCase.verifyEqual(envelopeSurface.ZData(:, 1), ...
+                result.ggv_used.v_mps, AbsTol=1e-12);
+            testCase.verifyEqual(envelopeSurface.XData(:, 1), ...
+                envelopeSurface.XData(:, end), AbsTol=1e-12);
+            testCase.verifyEqual(envelopeSurface.YData(:, 1), ...
+                envelopeSurface.YData(:, end), AbsTol=1e-12);
+            testCase.verifyEqual(actualPoints3d.XData(:), ...
+                result.ax_mps2(:) / result.ggv_used.gravity_mps2, ...
+                AbsTol=1e-12);
+            testCase.verifyEqual(actualPoints3d.YData(:), ...
+                result.ay_mps2(:) / result.ggv_used.gravity_mps2, ...
+                AbsTol=1e-12);
+            testCase.verifyEqual(actualPoints3d.ZData(:), ...
+                result.v_mps(:), AbsTol=1e-12);
             testCase.verifyNumElements(actualPoints.XData, ...
                 numel(result.v_mps));
             testCase.verifyEqual(interpolatedSlice.YData, ...
@@ -78,6 +90,36 @@ classdef plotGgvSurfaceTest < matlab.unittest.TestCase
 
             testCase.verifyError(action, "QSSLTS:PlotGGVShape");
         end
+
+        function testInternalFeasibilityHoleIsRejected(testCase)
+            result = plotGgvSurfaceTest.makeResult();
+            result.ggv_used.feasible(1, 3) = false;
+
+            action = @() plot_ggv_surface(result);
+
+            testCase.verifyError(action, "QSSLTS:GGVBoundaryCoverage");
+        end
+
+        function testExactGridEndpointsPreserveLateralAsymmetry(testCase)
+            ggv.v_mps = [10; 20];
+            ggv.ay_g = [-1 0 1];
+            ggv.ax_max_g = [0.1 0.8 0.3; 0.2 0.7 0.4];
+            ggv.ax_min_g = [-0.4 -1.0 -0.6; -0.3 -0.9 -0.5];
+            ggv.feasible = true(2, 3);
+            ggv.ay_limit_neg_g = [-1; -1];
+            ggv.ay_limit_pos_g = [1; 1];
+            ggv.ax_max_lateral_boundary_g = zeros(2, 1);
+            ggv.ax_min_lateral_boundary_g = zeros(2, 1);
+
+            [axBoundary_g, ayBoundary_g] = ...
+                prepare_ggv_boundary_surface(ggv);
+            [~, positiveIndex] = max(ayBoundary_g(1, :));
+
+            testCase.verifyEqual(axBoundary_g(1, 1), 0.1, ...
+                AbsTol=1e-12);
+            testCase.verifyEqual(axBoundary_g(1, positiveIndex), 0.3, ...
+                AbsTol=2e-2);
+        end
     end
 
     methods (Static, Access=private)
@@ -91,6 +133,10 @@ classdef plotGgvSurfaceTest < matlab.unittest.TestCase
             ggv.feasible = true(3, 5);
             ggv.feasible(3, [1 5]) = false;
             ggv.gravity_mps2 = 9.81;
+            ggv.ay_limit_neg_g = [-1; -1; -0.8];
+            ggv.ay_limit_pos_g = [1; 1; 0.8];
+            ggv.ax_max_lateral_boundary_g = [0.2; 0.1; 0];
+            ggv.ax_min_lateral_boundary_g = [-0.3; -0.3; -0.2];
             result.ggv_used = ggv;
             result.v_mps = [10; 15; 22; 30];
             result.ax_mps2 = [1; 2; -4; 0.5];

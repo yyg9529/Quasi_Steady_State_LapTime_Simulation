@@ -45,5 +45,21 @@ classdef summarizeLapResultTest < matlab.unittest.TestCase
             testCase.verifyEqual(summary.limiter_table.limiter, ...
                 ["rule_power"; "brake"]);
         end
+
+        function testEventScoreOverridesWholePathTime(testCase)
+            result.options.gravity_mps2 = 10;
+            result.track.ds_m = [1; 1];
+            result.limiter = ["lateral"; "lateral"];
+            result.lap_time_s = 26;
+            result.event.scored_time_s = 7;
+            result.v_mps = [10; 10];
+            result.ax_mps2 = [0; 0];
+            result.ay_mps2 = [10; 10];
+
+            summary = summarize_lap_result(result);
+
+            testCase.verifyEqual(summary.lap_time_s, 7, AbsTol=1e-12);
+            testCase.verifyEqual(summary.path_time_s, 26, AbsTol=1e-12);
+        end
     end
 end

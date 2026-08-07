@@ -112,18 +112,25 @@ classdef pac2002TirReductionTest < matlab.unittest.TestCase
 
         function test_factory_requires_measured_rolling_radius(testCase)
             rollingRadius = testCase.validRollingRadius();
+            artifactFile = fullfile(testCase.ProjectRoot, "data", ...
+                "tire", "Hoosier_16x75_10_R20.qss-envelope.mat");
+            expected = load_qss_tire_envelope(artifactFile);
 
             tire = tire_hoosier_16x75_10_r20_qss(rollingRadius);
 
             testCase.verifyEqual(tire.model_type, "load_sensitive");
-            testCase.verifyEqual(tire.Fz_ref_N, 667, AbsTol=1e-12);
-            testCase.verifyEqual(tire.mu_x_ref, 1.334655, AbsTol=1e-12);
-            testCase.verifyEqual(tire.mu_y_ref, 1.804320, AbsTol=1e-12);
+            testCase.verifyEqual(tire.Fz_ref_N, ...
+                expected.Fz_ref_N, AbsTol=1e-12);
+            testCase.verifyEqual(tire.mu_x_ref, ...
+                expected.mu_x_ref, AbsTol=1e-12);
+            testCase.verifyEqual(tire.mu_y_ref, ...
+                expected.mu_y_ref, AbsTol=1e-12);
             testCase.verifyEqual(tire.load_sensitivity_x, ...
-                -0.0168396327140722, AbsTol=1e-12);
+                expected.load_sensitivity_x, AbsTol=1e-12);
             testCase.verifyEqual(tire.load_sensitivity_y, ...
-                -0.0693256185155627, AbsTol=1e-12);
-            testCase.verifyEqual(tire.combined_n, 2, AbsTol=1e-12);
+                expected.load_sensitivity_y, AbsTol=1e-12);
+            testCase.verifyEqual(tire.combined_n, ...
+                expected.combined_n, AbsTol=1e-12);
             testCase.verifyEqual(tire.rolling_radius_m, ...
                 rollingRadius.value_m, AbsTol=1e-12);
             testCase.verifyEqual(tire.provenance.rolling_radius, ...
@@ -131,7 +138,9 @@ classdef pac2002TirReductionTest < matlab.unittest.TestCase
             testCase.verifyGreaterThan( ...
                 abs(tire.rolling_radius_m - 0.20066), 1e-12);
             testCase.verifyEqual(tire.provenance.source_tir_sha256, ...
-                "6AB8AA1219B7910A1660966AAD1B6C8FC7EF2FDB46F40BF0FA9B6FC172E53A2A");
+                "6CE561640F15CE2DC5CCBA3CC2622978933E4CBE0C6FB1F15EC87520DC42F023");
+            testCase.verifyEqual(tire.provenance.mfeval_version, ...
+                "4.3.1");
         end
 
         function test_factory_rejects_missing_rolling_radius_field(testCase)

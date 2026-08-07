@@ -23,6 +23,10 @@ reader 保留字段为 `s_m, ds_m, kappa_1pm, x_m, y_m, track_width_m, is_closed
 
 真实文件 `data/track/tianji_kart_QSS_track_closed.csv` 是进入 Git 并随仓库提供的正式验证输入。验收目标约为总长 `857.461445744691` m、闭合段 `1.461445744691` m；这些值用于保护文件内容和闭环几何契约。
 
+`data/track/fsec_hefei_2025_high_speed_avoidance_closed.csv` 来自 `2026_trackCAD_2025FSEC-Hefei-China_260325a.CATPart`（源文件 SHA-256 `C79F38EFE3C61C1AD94EBB5C57DAB17046FE5F82689728F05B4DD8651C4B9471`）。`preprocessing/track/extract_catpart_centerline.ps1` 通过 CATIA COM 确认 Rib 的 `CenterCurveElement`，从其中心路径草图排除 1 条已知悬空非路径几何后提取唯一闭环；若悬空段数量或额外闭环发生变化，脚本会拒绝输出。依据用户确认的单圈约 `1 km` 实长，对原始 `104.54 m` CAD 曲线采用 `CadToTrackScale=10` 还原，并由 Rib 截面从 `0.45 m` 还原为 `4.5 m` 交叉检查；该 10 倍比例是工程推断，不是 CATPart 内嵌的比例元数据。随后以 `2 m` 名义间距重采样。资产包含 523 个唯一节点和 1 个重复闭合端点，总长 `1045.43680192465 m`，文件 SHA-256 为 `BD0DCE461AA3A2F409B30775F550736D70566FB7C5E7EFC12D445D04C5A7CB5D`。它是 CAD 几何中心线，不是优化赛车线；缩尺还原后的 `track_width_m=4.5 m` 来自 Rib 显示带截面，在缺少锥桶坐标复核前仍不直接视为全程有效可行驶宽度，当前求解器也不使用该字段。GUI 选择该高避预设时默认按 1 圈计算，避免沿用 Tianji 的 26 圈耐久配置；这仍不代表实车赛事能耗结论。
+
+`data/track/fsc_2025_acceleration_open.csv` 与 `data/track/fsc_2025_skidpad_event_open.csv` 由 `preprocessing/track/generate_fsc_2025_dynamic_tracks.m` 按 [2025 中国大学生方程式汽车大赛规则最终版](https://img.sae-china.org/web/2025/04/2025%E4%B8%AD%E5%9B%BD%E5%A4%A7%E5%AD%A6%E7%94%9F%E6%96%B9%E7%A8%8B%E5%BC%8F%E5%A4%A7%E8%B5%9B%E8%A7%84%E5%88%99_%E6%9C%80%E7%BB%88%E7%89%88.pdf) 第八章生成。直线加速资产包含起点线前 `0.30 m` 的静止起步段和之后 `75 m`、`4.9 m` 宽的计时段；运行时显式冻结 `start_speed_mps=0` 且不设置终点停车约束，评分器只计算越过两道计时线之间的时间。八字绕环采用内外径 `15.25/21.25 m` 的几何中心线 `R=9.125 m`，按右两圈、左两圈顺序保存为 `229.336 m` 开放路径；`score_fsc_dynamic_event` 只统计第 2 个右圈与第 2 个左圈并取平均。规则评分采用的 `17.10 m` 等效直径只用于侧向加速度换算，不替代 `18.25 m` 几何中心线直径。规则未给出八字入口直道长度，资产从首次经过两圆切点开始，首速取 0 是保守的仿真边界而非对真实进场速度的声明；第一右圈因此兼作速度建立圈。赛道宽度目前仍是元数据，求解器没有锥桶碰撞/出界判定，结果是固定路径 QSS 理论计时，不是官方成绩或实车签核。
+
 ## 组合动力系统输入
 
 `models.powertrain` 启用时必须提供九个冻结顶层字段，生产接口仅定义这些字段：

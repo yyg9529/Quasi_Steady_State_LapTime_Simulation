@@ -57,6 +57,16 @@ classdef qssltsAppTest < matlab.unittest.TestCase
             testCase.verifyEqual(string(dashboardPage.Visible), "off");
         end
 
+        function testParameterCardsGridIsScrollable(testCase)
+            app = QssltsApp(false);
+            testCase.addTeardown(@() delete(app));
+
+            cards = findobj(app.UIFigure, Tag="parameter-cards-grid");
+
+            testCase.verifyNotEmpty(cards);
+            testCase.verifyEqual(string(cards.Scrollable), "on");
+        end
+
         function testAppUsesAnalysisEntryPoint(testCase)
             source = string(fileread(which("QssltsApp")));
 
@@ -103,6 +113,87 @@ classdef qssltsAppTest < matlab.unittest.TestCase
             testCase.verifyEqual(config.track.source_file, ...
                 fullfile(testCase.ProjectRoot, "data", "track", ...
                     "tianji_kart_QSS_track_closed.csv"));
+        end
+
+
+        function testHefeiTrackPresetUpdatesSource(testCase)
+            app = QssltsApp(false);
+            testCase.addTeardown(@() delete(app));
+            dropdown = findobj(app.UIFigure, Tag="param-track_preset");
+
+            preset = "fsec_hefei_2025_high_speed_avoidance_closed";
+            testCase.verifyTrue(ismember(preset, string(dropdown.ItemsData)));
+
+            dropdown.Value = preset;
+            dropdown.ValueChangedFcn(dropdown, []);
+            state = app.getParameterState();
+
+            testCase.verifyEqual(state.track_preset, preset);
+            testCase.verifyEqual(state.track_source_file, ...
+                "data/track/fsec_hefei_2025_high_speed_avoidance_closed.csv");
+            testCase.verifyEqual(state.endurance_num_laps, 1);
+        end
+
+        function testDynamicEventPresetsUpdateSource(testCase)
+            app = QssltsApp(false);
+            testCase.addTeardown(@() delete(app));
+            dropdown = findobj(app.UIFigure, Tag="param-track_preset");
+            presets = ["fsc_2025_acceleration_open", ...
+                "fsc_2025_skidpad_event_open"];
+            sources = ["data/track/fsc_2025_acceleration_open.csv", ...
+                "data/track/fsc_2025_skidpad_event_open.csv"];
+
+            for index = 1:numel(presets)
+                testCase.verifyTrue(ismember( ...
+                    presets(index), string(dropdown.ItemsData)));
+                dropdown.Value = presets(index);
+                dropdown.ValueChangedFcn(dropdown, []);
+                state = app.getParameterState();
+                testCase.verifyEqual(state.track_preset, presets(index));
+                testCase.verifyEqual(state.track_source_file, ...
+                    sources(index));
+                testCase.verifyEqual(state.endurance_num_laps, 1);
+            end
+        end
+
+        function testDynamicEventKpiUsesEventAndPathLabels(testCase)
+            result.event.type = "fsc_skidpad";
+            result.energy.E_lap_stored_kWh = 0.12;
+            result.solver.converged = true;
+            result.solver.iterations = 3;
+            summary.lap_time_s = 4.5;
+            summary.max_speed_mps = 15;
+
+            data = qsslts_kpi_data(result, summary);
+
+            testCase.verifyEqual(data.timeLabel, "Event time");
+            testCase.verifyEqual(data.timeMeta, "赛事计时时间");
+            testCase.verifyEqual(data.energyLabel, "Path energy");
+            testCase.verifyEqual(data.energyMeta, ...
+                "完整开放路径储能侧能量");
+        end
+
+        function testTrackImportPreservesExplicitLapCount(testCase)
+            app = QssltsApp(false);
+            testCase.addTeardown(@() delete(app));
+            state = app.getParameterState();
+            state.track_preset = ...
+                "fsec_hefei_2025_high_speed_avoidance_closed";
+            state.track_source_file = ...
+                "data/track/fsec_hefei_2025_high_speed_avoidance_closed.csv";
+            state.endurance_num_laps = 4;
+            filename = string(tempname) + ".json";
+            testCase.addTeardown(@() delete(filename));
+            write_qsslts_gui_config(filename, state);
+
+            app.importParameters(filename);
+            imported = app.getParameterState();
+
+            testCase.verifyEqual(imported.track_preset, ...
+                state.track_preset);
+            testCase.verifyEqual(imported.track_source_file, ...
+                state.track_source_file);
+            testCase.verifyEqual(imported.endurance_num_laps, 4);
         end
     end
 end

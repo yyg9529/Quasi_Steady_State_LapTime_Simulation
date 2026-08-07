@@ -11,6 +11,10 @@ end
 
 validateModel(model);
 state = normalizeInput(input);
+if isfield(model, "mfeval") && isfield(model.mfeval, "parameters")
+    output = evaluateWithMfeval(model, state);
+    return
+end
 sections = model.sections;
 
 modelOrientation = sideOrientation(model.model_side);
@@ -67,6 +71,66 @@ output.within_range = contact & ...
     inRange(kappa, model.ranges.kappa) & ...
     inRange(state.alpha_rad, model.ranges.alpha_rad) & ...
     inRange(state.gamma_rad, model.ranges.gamma_rad);
+end
+
+function output = evaluateWithMfeval(model, state)
+targetSize = size(state.Fz_N);
+modelOrientation = sideOrientation(model.model_side);
+mountOrientation = sideOrientation(state.mount_side);
+reflection = mountOrientation .* modelOrientation;
+alpha = -reflection .* state.alpha_rad;
+gamma = reflection .* state.gamma_rad;
+turnSlip = reflection .* state.turn_slip_1pm;
+contact = state.Fz_N > 0;
+
+Fx = zeros(targetSize);
+Fy = zeros(targetSize);
+Mx = zeros(targetSize);
+My = zeros(targetSize);
+Mz = zeros(targetSize);
+effectiveRadius = repmat(model.unloaded_radius_m, targetSize);
+if any(contact, "all")
+    inputs = [reshape(state.Fz_N(contact), [], 1), ...
+        reshape(state.kappa(contact), [], 1), ...
+        reshape(alpha(contact), [], 1), ...
+        reshape(gamma(contact), [], 1), ...
+        reshape(turnSlip(contact), [], 1), ...
+        reshape(state.Vx_mps(contact), [], 1)];
+    warningIds = ["Solver:CoeffChecks:Ex", ...
+        "Solver:CoeffChecks:EHyp", "Solver:CoeffChecks:Ey", ...
+        "Solver:CoeffChecks:Et", "Solver:CoeffChecks:Exa", ...
+        "Solver:CoeffChecks:Eyk"];
+    warningStates = repmat(warning("query", warningIds(1)), ...
+        size(warningIds));
+    for warningIndex = 1:numel(warningIds)
+        warningStates(warningIndex) = warning("off", ...
+            warningIds(warningIndex));
+    end
+    cleanup = onCleanup(@() warning(warningStates));
+    evaluated = model.mfeval.evaluate( ...
+        model.mfeval.parameters, inputs, ...
+        model.mfeval.use_mode);
+    Fx(contact) = evaluated(:, 1);
+    contactReflection = reshape(reflection(contact), [], 1);
+    Fy(contact) = contactReflection .* evaluated(:, 2);
+    Mx(contact) = contactReflection .* evaluated(:, 4);
+    My(contact) = evaluated(:, 5);
+    Mz(contact) = contactReflection .* evaluated(:, 6);
+    effectiveRadius(contact) = evaluated(:, 13);
+    clear cleanup
+end
+
+output.Fx_N = Fx;
+output.Fy_N = Fy;
+output.Mx_Nm = Mx;
+output.My_Nm = My;
+output.Mz_Nm = Mz;
+output.effective_radius_m = effectiveRadius;
+output.within_range = contact ...
+    & inRange(state.Fz_N, model.ranges.Fz_N) ...
+    & inRange(state.kappa, model.ranges.kappa) ...
+    & inRange(alpha, model.ranges.alpha_rad) ...
+    & inRange(gamma, model.ranges.gamma_rad);
 end
 
 function validateModel(model)

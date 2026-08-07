@@ -67,6 +67,7 @@ steady.moment_residual_Nm = residual(2);
 steady.converged = converged;
 steady.iterations = iterations;
 steady.wheel = point.wheel;
+steady.within_tire_range = all(point.within_tire_range);
 end
 
 function [residual, point] = evaluateResidual(unknown, yawRate_radps, ...

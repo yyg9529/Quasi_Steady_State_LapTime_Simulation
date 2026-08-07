@@ -29,6 +29,7 @@ ay_g = nan(nSpeed, 1);
 forceResidual_N = nan(nSpeed, 1);
 momentResidual_Nm = nan(nSpeed, 1);
 converged = false(nSpeed, 1);
+withinTireRange = false(nSpeed, 1);
 
 for iSpeed = 1:nSpeed
     condition.speed_mps = speed_mps(iSpeed);
@@ -42,25 +43,50 @@ for iSpeed = 1:nSpeed
     forceResidual_N(iSpeed) = steady.force_residual_N;
     momentResidual_Nm(iSpeed) = steady.moment_residual_Nm;
     converged(iSpeed) = steady.converged;
+    withinTireRange(iSpeed) = steady.within_tire_range;
 end
 
 steer_deg = rad2deg(steer_rad);
-localGradient_deg_per_g = gradient(steer_deg, ay_g);
+valid = converged & withinTireRange;
+localGradient_deg_per_g = gradientOnValidRuns(steer_deg, ay_g, valid);
 fitMask = ay_g >= min(study.linear_fit_range_g) ...
-    & ay_g <= max(study.linear_fit_range_g) & converged;
-if nnz(fitMask) < 2
-    error("QSSLTS:UndersteerFitRange", ...
-        "At least two converged cases must lie inside linear_fit_range_g.");
+    & ay_g <= max(study.linear_fit_range_g) ...
+    & valid;
+fitPointCount = nnz(fitMask);
+validPointCount = nnz(valid);
+fitAvailable = fitPointCount >= 2;
+steadyFitCoefficients = [NaN NaN];
+steadyFitR2 = NaN;
+linearizedGradient_deg_per_g = NaN;
+linearFitR2 = NaN;
+if fitAvailable
+    steadyFitCoefficients = polyfit( ...
+        ay_g(fitMask), steer_deg(fitMask), 1);
+    fitPrediction_deg = polyval(steadyFitCoefficients, ay_g(fitMask));
+    fitResidual_deg = steer_deg(fitMask) - fitPrediction_deg;
+    centered_deg = steer_deg(fitMask) - mean(steer_deg(fitMask));
+    steadyFitR2 = 1 - sum(fitResidual_deg.^2) / sum(centered_deg.^2);
+    referenceSpeed_mps = mean(speed_mps(fitMask));
+    linearizedGradient_deg_per_g = linearizedUndersteerGradient( ...
+        vehicle, tireModel, aero, referenceSpeed_mps);
+    linearFitR2 = 1;
 end
 
-steadyFitCoefficients = polyfit(ay_g(fitMask), steer_deg(fitMask), 1);
-fitPrediction_deg = polyval(steadyFitCoefficients, ay_g(fitMask));
-fitResidual_deg = steer_deg(fitMask) - fitPrediction_deg;
-centered_deg = steer_deg(fitMask) - mean(steer_deg(fitMask));
-steadyFitR2 = 1 - sum(fitResidual_deg.^2) / sum(centered_deg.^2);
-referenceSpeed_mps = mean(speed_mps(fitMask));
-linearizedGradient_deg_per_g = linearizedUndersteerGradient( ...
-    vehicle, tireModel, aero, referenceSpeed_mps);
+if fitAvailable
+    status = "complete";
+    statusMessage = "Understeer curve and gradient available.";
+elseif validPointCount > 0
+    status = "partial";
+    statusMessage = sprintf( ...
+        "Understeer curve available; gradient unavailable because " + ...
+        "%d valid fit point(s) were found (at least 2 required).", ...
+        fitPointCount);
+else
+    status = "unavailable";
+    statusMessage = ...
+        "Understeer unavailable because no converged, tire-valid " + ...
+        "operating points were found.";
+end
 
 result.radius_m = study.radius_m;
 result.speed_mps = speed_mps;
@@ -71,18 +97,38 @@ result.yaw_rate_radps = yawRate_radps;
 result.local_gradient_deg_per_g = localGradient_deg_per_g;
 result.linear_fit_gradient_deg_per_g = linearizedGradient_deg_per_g;
 result.linear_fit_range_g = study.linear_fit_range_g;
-result.linear_fit_R2 = 1;
+result.linear_fit_R2 = linearFitR2;
 result.steady_curve_gradient_deg_per_g = steadyFitCoefficients(1);
 result.steady_curve_R2 = steadyFitR2;
 result.force_residual_N = forceResidual_N;
 result.moment_residual_Nm = momentResidual_Nm;
 result.converged = converged;
+result.within_tire_range = withinTireRange;
+result.available = validPointCount > 0;
+result.fit_available = fitAvailable;
+result.valid_point_count = validPointCount;
+result.fit_point_count = fitPointCount;
+result.status = status;
+result.status_message = statusMessage;
 result.provenance.linear_fit_definition = ...
     "zero-slip small-angle axle-stiffness linearization";
 result.provenance.linear_fit_R2_definition = ...
     "unity by construction for the classical linearized relation";
 result.provenance.steady_curve_definition = ...
     "least-squares fit of finite-radius four-wheel steady points";
+end
+
+function localGradient = gradientOnValidRuns(steer_deg, ay_g, valid)
+localGradient = nan(size(steer_deg));
+edges = diff([false; valid(:); false]);
+runStarts = find(edges == 1);
+runEnds = find(edges == -1) - 1;
+for index = 1:numel(runStarts)
+    run = runStarts(index):runEnds(index);
+    if numel(run) >= 2
+        localGradient(run) = gradient(steer_deg(run), ay_g(run));
+    end
+end
 end
 
 function gradient_deg_per_g = linearizedUndersteerGradient( ...

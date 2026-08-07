@@ -24,32 +24,32 @@ axMax_g(~ggv.feasible) = NaN;
 axMin_g(~ggv.feasible) = NaN;
 sliceAxMax_g = interp1(vGrid_mps, axMax_g, speedSlices_mps, "linear");
 sliceAxMin_g = interp1(vGrid_mps, axMin_g, speedSlices_mps, "linear");
-[ayMesh_g, speedMesh_mps] = meshgrid(ayGrid_g, vGrid_mps);
 actualAy_g = result.ay_mps2(:) / ggv.gravity_mps2;
 actualAx_g = result.ax_mps2(:) / ggv.gravity_mps2;
+[axBoundary_g, ayBoundary_g, speedBoundary_mps] = ...
+    prepare_ggv_boundary_surface(ggv);
 
 fig = figure(Name="GGV Capability");
 layout = tiledlayout(fig, 1, 2, Padding="compact", ...
     TileSpacing="compact");
 
 axSurface = nexttile(layout);
-surf(axSurface, ayMesh_g, speedMesh_mps, axMax_g, ...
-    FaceAlpha=0.65, EdgeColor="none", Tag="ggv-upper-surface", ...
-    DisplayName="GGV acceleration boundary");
+surf(axSurface, axBoundary_g, ayBoundary_g, speedBoundary_mps, ...
+    speedBoundary_mps, FaceAlpha=0.82, ...
+    EdgeColor=[0.15 0.25 0.28], EdgeAlpha=0.24, ...
+    Tag="ggv-envelope-surface", DisplayName="GGV capability boundary");
 hold(axSurface, "on");
-surf(axSurface, ayMesh_g, speedMesh_mps, axMin_g, ...
-    FaceAlpha=0.65, EdgeColor="none", Tag="ggv-lower-surface", ...
-    DisplayName="GGV braking boundary");
-scatter3(axSurface, actualAy_g, result.v_mps(:), actualAx_g, ...
+scatter3(axSurface, actualAx_g, actualAy_g, result.v_mps(:), ...
     18, result.v_mps(:), "filled", Tag="actual-ggv-points-3d", ...
     DisplayName="Actual lap points");
 grid(axSurface, "on");
-xlabel(axSurface, "Ay (g)");
-ylabel(axSurface, "Speed (m/s)");
-zlabel(axSurface, "Ax (g)");
+xlabel(axSurface, "Ax (g)");
+ylabel(axSurface, "Ay (g)");
+zlabel(axSurface, "Speed (m/s)");
 title(axSurface, "GGV Capability Surface");
-view(axSurface, 3);
+view(axSurface, [-38 26]);
 legend(axSurface, Location="best");
+colorbar(axSurface);
 
 axSlices = nexttile(layout);
 hold(axSlices, "on");

@@ -31,6 +31,7 @@ classdef ymdUndersteerTest < matlab.unittest.TestCase
 
             testCase.verifySize(ymd.ay_mps2, [3 3]);
             testCase.verifySize(ymd.yaw_moment_cg_Nm, [3 3]);
+            testCase.verifySize(ymd.yaw_moment_coefficient, [3 3]);
             testCase.verifySize(ymd.converged, [3 3]);
             testCase.verifySize(ymd.wheel.Fz_N, [3 3 4]);
             testCase.verifyEqual(ymd.yaw_rate_radps(2, 2), 0, ...
@@ -38,6 +39,10 @@ classdef ymdUndersteerTest < matlab.unittest.TestCase
             testCase.verifyEqual(ymd.ay_mps2(2, 2), 0, AbsTol=1e-10);
             testCase.verifyEqual(ymd.yaw_moment_cg_Nm(2, 2), 0, ...
                 AbsTol=1e-8);
+            testCase.verifyEqual(ymd.yaw_moment_coefficient, ...
+                ymd.yaw_moment_cg_Nm / (testCase.Vehicle.mass.total_kg ...
+                * 9.80665 * testCase.Vehicle.geometry.wheelbase_m), ...
+                AbsTol=1e-12);
             expectedNormal_mps2 = ymd.yaw_rate_radps(1, 1) ...
                 * study.speed_mps;
             testCase.verifyEqual( ...
@@ -103,6 +108,43 @@ classdef ymdUndersteerTest < matlab.unittest.TestCase
             testCase.verifyLessThan(max(abs(result.force_residual_N)), 1e-6);
             testCase.verifyLessThan(max(abs(result.moment_residual_Nm)), 1e-6);
         end
+
+        function testInvalidTireRangeDoesNotContaminateLocalGradient(testCase)
+            tireModel.evaluate = @(input) ...
+                ymdUndersteerTest.evaluateRangeLimitedTire( ...
+                input, 60000, 80000);
+            study.radius_m = 50;
+            study.speed_mps = [5; 10; 15];
+            study.linear_fit_range_g = [0 1];
+
+            result = calc_understeer_gradient(testCase.Vehicle, ...
+                tireModel, testCase.Aero, study);
+
+            testCase.verifyEqual(result.within_tire_range, ...
+                [true; false; true]);
+            testCase.verifyTrue(all(isnan( ...
+                result.local_gradient_deg_per_g)));
+        end
+
+        function testInsufficientFitPointsRetainUndersteerCurve(testCase)
+            study.radius_m = 50;
+            study.speed_mps = [5; 10; 15];
+            study.linear_fit_range_g = [0.15 0.25];
+
+            result = calc_understeer_gradient(testCase.Vehicle, ...
+                testCase.TireModel, testCase.Aero, study);
+
+            testCase.verifyFalse(result.fit_available);
+            testCase.verifyEqual(result.fit_point_count, 1);
+            testCase.verifyEqual(result.valid_point_count, 3);
+            testCase.verifyEqual(result.status, "partial");
+            testCase.verifySize(result.ay_g, [3 1]);
+            testCase.verifyTrue(all(isfinite(result.roadwheel_steer_rad)));
+            testCase.verifyTrue(isnan( ...
+                result.linear_fit_gradient_deg_per_g));
+            testCase.verifyTrue(isnan( ...
+                result.steady_curve_gradient_deg_per_g));
+        end
     end
 
     methods (Static)
@@ -125,6 +167,15 @@ classdef ymdUndersteerTest < matlab.unittest.TestCase
             output.Fx_N = zeros(4, 1);
             output.Fy_N = stiffness_Nprad .* input.alpha_rad;
             output.Mz_Nm = zeros(4, 1);
+        end
+
+
+        function output = evaluateRangeLimitedTire(input, ...
+                frontStiffness_Nprad, rearStiffness_Nprad)
+            output = ymdUndersteerTest.evaluateLinearTire( ...
+                input, frontStiffness_Nprad, rearStiffness_Nprad);
+            valid = abs(mean(input.Vx_mps) - 10) > 1;
+            output.within_range = repmat(valid, size(input.Vx_mps));
         end
     end
 end

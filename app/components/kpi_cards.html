@@ -147,9 +147,9 @@
   <div class="grid">
     <section class="card">
       <span class="accent"></span>
-      <div class="eyebrow">Lap time</div>
+      <div class="eyebrow" id="timeLabel">Lap time</div>
       <div class="value"><span id="lapTime">—</span> <span class="unit">s</span></div>
-      <div class="meta">固定赛线单圈时间</div>
+      <div class="meta" id="timeMeta">固定赛线单圈时间</div>
     </section>
     <section class="card">
       <span class="accent"></span>
@@ -159,9 +159,9 @@
     </section>
     <section class="card">
       <span class="accent"></span>
-      <div class="eyebrow">Lap energy</div>
+      <div class="eyebrow" id="energyLabel">Lap energy</div>
       <div class="value"><span id="lapEnergy">—</span> <span class="unit">kWh</span></div>
-      <div class="meta">储能侧单圈能量</div>
+      <div class="meta" id="energyMeta">储能侧单圈能量</div>
     </section>
     <section class="card status">
       <span class="accent"></span>
@@ -173,7 +173,8 @@
   <script>
     function render(data) {
       if (!data) return;
-      ["lapTime", "maxSpeed", "lapEnergy", "convergence"].forEach(function (key) {
+      ["lapTime", "maxSpeed", "lapEnergy", "convergence",
+       "timeLabel", "timeMeta", "energyLabel", "energyMeta"].forEach(function (key) {
         if (data[key] !== undefined) document.getElementById(key).textContent = data[key];
       });
     }

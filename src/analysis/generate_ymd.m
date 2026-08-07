@@ -93,8 +93,14 @@ for iBeta = 1:nBeta
             point.Fy_body_N, 1, 1, 4);
     end
 end
+yawMomentReference_Nm = vehicle.mass.total_kg * 9.80665 ...
+    * vehicle.geometry.wheelbase_m;
+ymd.yaw_moment_coefficient = ...
+    ymd.yaw_moment_cg_Nm / yawMomentReference_Nm;
 ymd.provenance.model = "four-wheel quasi-steady yaw moment diagram";
 ymd.provenance.wheel_order = ["FL", "FR", "RL", "RR"];
+ymd.provenance.yaw_moment_coefficient_reference_Nm = ...
+    yawMomentReference_Nm;
 if isfield(tireModel, "source")
     ymd.provenance.tire_source = tireModel.source;
 end

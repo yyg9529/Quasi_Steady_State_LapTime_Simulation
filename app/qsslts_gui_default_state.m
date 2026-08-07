@@ -1,5 +1,9 @@
-function state = qsslts_gui_default_state()
+function state = qsslts_gui_default_state(projectRoot)
 %QSSLTS_GUI_DEFAULT_STATE Return the complete GUI baseline in SI units.
+
+arguments
+    projectRoot (1, 1) string = ""
+end
 
 state = struct( ...
     track_preset="tianji_kart_QSS_track_closed", ...
@@ -72,4 +76,17 @@ state = struct( ...
     options_v_max_mps=45, ...
     options_v_grid_step_mps=0.5, ...
     options_solver_tolerance_mps=1e-8);
+
+if strlength(projectRoot) > 0
+    envelopeFile = fullfile(projectRoot, "data", "tire", ...
+        "Hoosier_16x75_10_R20.qss-envelope.mat");
+    tire = load_qss_tire_envelope(envelopeFile);
+    state.tire_preset = "tire_mfeval_qss_local";
+    state.tire_Fz_ref_N = tire.Fz_ref_N;
+    state.tire_mu_x_ref = tire.mu_x_ref;
+    state.tire_mu_y_ref = tire.mu_y_ref;
+    state.tire_load_sensitivity_x = tire.load_sensitivity_x;
+    state.tire_load_sensitivity_y = tire.load_sensitivity_y;
+    state.tire_combined_n = tire.combined_n;
+end
 end

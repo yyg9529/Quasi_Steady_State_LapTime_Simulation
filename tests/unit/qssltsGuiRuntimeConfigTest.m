@@ -56,6 +56,72 @@ classdef qssltsGuiRuntimeConfigTest < matlab.unittest.TestCase
                 (0:0.5:45).', AbsTol=1e-12);
         end
 
+        function testHefeiTrackPresetMapsToRuntimeConfig(testCase)
+            state = qssltsGuiRuntimeConfigTest.baselineState();
+            state.track_preset = ...
+                "fsec_hefei_2025_high_speed_avoidance_closed";
+            state.track_source_file = ...
+                "data/track/fsec_hefei_2025_high_speed_avoidance_closed.csv";
+
+            config = qsslts_gui_state_to_runtime_config( ...
+                state, testCase.ProjectRoot);
+
+            testCase.verifyEqual(config.track.length_m, ...
+                1045.43680192465, AbsTol=1e-9);
+            testCase.verifyEqual(config.track.source_file, ...
+                fullfile(testCase.ProjectRoot, "data", "track", ...
+                    "fsec_hefei_2025_high_speed_avoidance_closed.csv"));
+        end
+
+        function testAccelerationPresetMapsToOpenEvent(testCase)
+            state = qssltsGuiRuntimeConfigTest.baselineState();
+            state.track_preset = "fsc_2025_acceleration_open";
+            state.track_source_file = ...
+                "data/track/fsc_2025_acceleration_open.csv";
+
+            config = qsslts_gui_state_to_runtime_config( ...
+                state, testCase.ProjectRoot);
+
+            testCase.verifyFalse(config.track.is_closed);
+            testCase.verifyEqual(config.track.length_m, 75.3, ...
+                AbsTol=1e-12);
+            testCase.verifyEqual(config.options.start_speed_mps, 0, ...
+                AbsTol=1e-12);
+            testCase.verifyTrue(isnan(config.options.finish_speed_mps));
+            testCase.verifyEqual(config.event.type, "fsc_acceleration");
+            testCase.verifyEqual(config.event.rollout_distance_m, 0.30, ...
+                AbsTol=1e-12);
+        end
+
+        function testSkidpadPresetMapsToTimedEvent(testCase)
+            state = qssltsGuiRuntimeConfigTest.baselineState();
+            state.track_preset = "fsc_2025_skidpad_event_open";
+            state.track_source_file = ...
+                "data/track/fsc_2025_skidpad_event_open.csv";
+
+            config = qsslts_gui_state_to_runtime_config( ...
+                state, testCase.ProjectRoot);
+
+            testCase.verifyFalse(config.track.is_closed);
+            testCase.verifyEqual(config.event.type, "fsc_skidpad");
+            testCase.verifyEqual(config.event.centerline_radius_m, ...
+                9.125, AbsTol=1e-12);
+            testCase.verifyEqual(config.event.scoring_diameter_m, ...
+                17.10, AbsTol=1e-12);
+            testCase.verifyEqual(config.event.timed_laps, [2; 4]);
+        end
+
+        function testTrackPresetSourceMismatchErrors(testCase)
+            state = qssltsGuiRuntimeConfigTest.baselineState();
+            state.track_preset = ...
+                "fsec_hefei_2025_high_speed_avoidance_closed";
+
+            action = @() qsslts_gui_state_to_runtime_config( ...
+                state, testCase.ProjectRoot);
+
+            testCase.verifyError(action, "QSSLTS:GuiConfig");
+        end
+
         function testSpeedGridIncludesNondivisibleMaximum(testCase)
             state = qssltsGuiRuntimeConfigTest.baselineState();
             state.options_v_max_mps = 1.0;
@@ -97,6 +163,28 @@ classdef qssltsGuiRuntimeConfigTest < matlab.unittest.TestCase
             testCase.verifyEqual(config.models.powertrain.layout, "RWD");
             testCase.verifyEqual(config.options.v_max_mps, ...
                 45, AbsTol=1e-12);
+            testCase.verifyEqual( ...
+                config.models.tire.provenance.source_tir_sha256, ...
+                "6CE561640F15CE2DC5CCBA3CC2622978933E4CBE0C6FB1F15EC87520DC42F023");
+            testCase.verifyFalse(isfield(config.models.tire, "evaluate"));
+            testCase.verifyFalse(isfield(config.models.tire, "mfeval"));
+        end
+
+        function testProjectDefaultsUseExtractedQssEnvelope(testCase)
+            state = qsslts_gui_default_state(testCase.ProjectRoot);
+            artifactFile = fullfile(testCase.ProjectRoot, ...
+                "data", "tire", ...
+                "Hoosier_16x75_10_R20.qss-envelope.mat");
+            saved = load(artifactFile, "qss_envelope");
+
+            testCase.verifyEqual(state.tire_preset, ...
+                "tire_mfeval_qss_local");
+            testCase.verifyEqual(state.tire_mu_x_ref, ...
+                saved.qss_envelope.tire.mu_x_ref, AbsTol=1e-12);
+            testCase.verifyEqual(state.tire_mu_y_ref, ...
+                saved.qss_envelope.tire.mu_y_ref, AbsTol=1e-12);
+            testCase.verifyEqual(state.tire_combined_n, ...
+                saved.qss_envelope.tire.combined_n, AbsTol=1e-12);
         end
 
         function testAdvancedParametersMapToRuntimeConfig(testCase)

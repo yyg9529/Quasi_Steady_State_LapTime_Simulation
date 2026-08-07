@@ -169,6 +169,68 @@ classdef pac2002FullModelTest < matlab.unittest.TestCase
 
             testCase.verifyGreaterThan(positive.Fy_N - negative.Fy_N, 0);
         end
+
+        function testMfevalExportCreatesHashBoundParameterFile(testCase)
+            testCase.assumeTrue(isfile(testCase.RealTirPath));
+            temporaryFolder = testCase.applyFixture( ...
+                matlab.unittest.fixtures.TemporaryFolderFixture);
+            copiedTir = fullfile(temporaryFolder.Folder, ...
+                "Hoosier_16x75_10_R20.tir");
+            copyfile(testCase.RealTirPath, copiedTir);
+
+            manifest = export_mfeval_parameters(temporaryFolder.Folder);
+            saved = load(manifest.parameter_file, "mfeval_export");
+
+            testCase.verifyTrue(isfile(manifest.parameter_file));
+            testCase.verifyEqual(manifest.mfeval_version, "4.3.1");
+            testCase.verifyEqual(saved.mfeval_export.source.sha256, ...
+                "6CE561640F15CE2DC5CCBA3CC2622978933E4CBE0C6FB1F15EC87520DC42F023");
+            testCase.verifyEqual(saved.mfeval_export.parameters.FITTYP, 6);
+            testCase.verifyEqual(saved.mfeval_export.parameters.FNOMIN, 667);
+            testCase.verifyEqual(saved.mfeval_export.parameters.FZMAX, 9900);
+        end
+
+        function testLoadedTirUsesMfevalOutputs(testCase)
+            testCase.assumeTrue(isfile(testCase.RealTirPath));
+            model = load_pac2002_tire(testCase.RealTirPath);
+            input = testCase.validScalarInput();
+            input.kappa = 0.08;
+            input.alpha_rad = 0.07;
+            input.gamma_rad = 0.025;
+            warningState = warning("off", "Solver:CoeffChecks:Exa");
+            testCase.addTeardown(@() warning(warningState));
+
+            actual = model.evaluate(input);
+            directInput = [input.Fz_N, input.kappa, ...
+                -input.alpha_rad, input.gamma_rad, ...
+                input.turn_slip_1pm, input.Vx_mps];
+            expected = mfeval(model.mfeval.parameters, directInput, ...
+                model.mfeval.use_mode);
+
+            testCase.verifyEqual(model.evaluator_name, "MFeval");
+            testCase.verifyEqual(model.mfeval.version, "4.3.1");
+            testCase.verifyEqual(actual.Fx_N, expected(1), RelTol=1e-12);
+            testCase.verifyEqual(actual.Fy_N, expected(2), RelTol=1e-12);
+            testCase.verifyEqual(actual.Mx_Nm, expected(4), AbsTol=1e-12);
+            testCase.verifyEqual(actual.My_Nm, expected(5), RelTol=1e-12);
+            testCase.verifyEqual(actual.Mz_Nm, expected(6), RelTol=1e-12);
+            testCase.verifyEqual(actual.effective_radius_m, expected(13), ...
+                RelTol=1e-12);
+        end
+
+        function testMfevalModelRunsInBackgroundPool(testCase)
+            testCase.assumeTrue(isfile(testCase.RealTirPath));
+            model = load_pac2002_tire(testCase.RealTirPath);
+            input = testCase.validScalarInput();
+            input.alpha_rad = 0.03;
+
+            future = parfeval(backgroundPool, model.evaluate, 1, input);
+            testCase.addTeardown(@() cancel(future));
+            output = fetchOutputs(future);
+
+            testCase.verifyTrue(isfinite(output.Fy_N));
+            testCase.verifyTrue(output.within_range);
+        end
     end
 
     methods (Static, Access = private)

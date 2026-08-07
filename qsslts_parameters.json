@@ -1,0 +1,96 @@
+{
+  "schema": "qsslts-gui-parameters",
+  "schema_version": 2,
+  "units": "SI",
+  "track": {
+    "preset": "fsec_hefei_2025_high_speed_avoidance_closed",
+    "source_file": "data/track/fsec_hefei_2025_high_speed_avoidance_closed.csv"
+  },
+  "endurance": {
+    "num_laps": 1,
+    "safety_factor": 1.1
+  },
+  "vehicle": {
+    "preset": "vehicle_baseline",
+    "mass_total_kg": 300,
+    "wheelbase_m": 1.56,
+    "track_front_m": 1.2,
+    "track_rear_m": 1.2,
+    "cg_height_m": 0.3,
+    "front_static_frac": 0.4,
+    "inertia_Iz_kgm2": 120,
+    "front_lateral_load_transfer_frac": 0.5,
+    "drivetrain_layout": "RWD"
+  },
+  "tire": {
+    "preset": "tire_mfeval_qss_local",
+    "Fz_ref_N": 667,
+    "mu_x_ref": 1.3332642635245076,
+    "mu_y_ref": 1.804309514990486,
+    "load_sensitivity_x": -0.017032578677741956,
+    "load_sensitivity_y": -0.0693249604525259,
+    "combined_n": 1.911,
+    "rolling_radius_m": 0.203
+  },
+  "aero": {
+    "preset": "aero_baseline",
+    "CLA_m2": 4.3,
+    "CDA_m2": 1.1,
+    "front_downforce_frac": 0.4
+  },
+  "brake": {
+    "preset": "brake_baseline",
+    "enabled": true,
+    "force_limit_enabled": true,
+    "max_total_brake_force_N": 10000,
+    "max_decel_g_mechanical": 2,
+    "max_total_brake_torque_Nm": 1400,
+    "front_bias": 0.6
+  },
+  "powertrain": {
+    "preset": "powertrain_emrax228_hvcc_demo",
+    "gear_ratio": 4,
+    "drivetrain_efficiency": 0.9,
+    "motor": {
+      "max_mechanical_speed_rpm": 6500,
+      "physical_peak_power_W": 104000,
+      "physical_peak_power_rpm": 4500,
+      "physical_cont_power_W": 75000,
+      "peak_torque_Nm": 220,
+      "cont_torque_Nm": 130,
+      "required_voltage_peak_power_V": 830,
+      "peak_phase_current_Arms": 235,
+      "cont_phase_current_Arms": 120,
+      "Kv_no_load_rpm_per_V": 10.14,
+      "Kv_nominal_load_rpm_per_V": 7.85,
+      "Kv_peak_load_rpm_per_V": 5.65,
+      "Kt_Nm_per_Arms": 0.94,
+      "eta_const": 0.94
+    },
+    "battery": {
+      "V_max_V": 600,
+      "V_nominal_V": 540,
+      "V_min_V": 450,
+      "V_bus_assumed_V": 600,
+      "E_nominal_kWh": 8,
+      "SOC_init": 0.95,
+      "SOC_min": 0.1,
+      "P_discharge_peak_W": 100000,
+      "I_discharge_peak_A": 300,
+      "eta_discharge": 0.98,
+      "P_ts_aux_W": 500
+    },
+    "inverter": {
+      "V_dc_max_V": 600,
+      "P_dc_peak_W": 100000,
+      "I_dc_peak_A": 300,
+      "I_phase_peak_Arms": 250,
+      "eta_const": 0.97
+    }
+  },
+  "options": {
+    "v_max_mps": 45,
+    "v_grid_step_mps": 0.5,
+    "solver_tolerance_mps": 1E-8
+  }
+}

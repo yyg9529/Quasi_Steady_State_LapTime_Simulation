@@ -13,10 +13,20 @@ if ~isfolder(projectRoot)
 end
 
 requirePreset(state.track_preset, ...
-    "tianji_kart_QSS_track_closed", "track");
+    ["tianji_kart_QSS_track_closed", ...
+    "fsec_hefei_2025_high_speed_avoidance_closed", ...
+    "fsc_2025_acceleration_open", ...
+    "fsc_2025_skidpad_event_open"], "track");
+expectedTrackSource = trackPresetSourceFile(state.track_preset);
+actualTrackSource = replace(string(state.track_source_file), "\", "/");
+if actualTrackSource ~= expectedTrackSource
+    fail("Track preset/source mismatch: " + state.track_preset + ...
+        " requires " + expectedTrackSource);
+end
 requirePreset(state.vehicle_preset, "vehicle_baseline", "vehicle");
 requirePreset(state.tire_preset, ...
-    "tire_load_sensitive_baseline", "tire");
+    ["tire_load_sensitive_baseline", "tire_mfeval_qss_local"], ...
+    "tire");
 requirePreset(state.aero_preset, "aero_baseline", "aero");
 requirePreset(state.brake_preset, "brake_baseline", "brake");
 requirePreset(state.powertrain_preset, ...
@@ -37,7 +47,15 @@ vehicle.load_transfer.front_lateral_distribution = ...
     state.vehicle_front_lateral_load_transfer_frac;
 vehicle.drivetrain.layout = state.vehicle_drivetrain_layout;
 
-tire = tire_load_sensitive_baseline();
+if state.tire_preset == "tire_mfeval_qss_local"
+    envelopeFile = fullfile(projectRoot, "data", "tire", ...
+        "Hoosier_16x75_10_R20.qss-envelope.mat");
+    tire = load_qss_tire_envelope(envelopeFile);
+    exported = tire;
+else
+    tire = tire_load_sensitive_baseline();
+    exported = struct();
+end
 tire.Fz_ref_N = state.tire_Fz_ref_N;
 tire.mu_x_ref = state.tire_mu_x_ref;
 tire.mu_y_ref = state.tire_mu_y_ref;
@@ -45,6 +63,17 @@ tire.load_sensitivity_x = state.tire_load_sensitivity_x;
 tire.load_sensitivity_y = state.tire_load_sensitivity_y;
 tire.combined_n = state.tire_combined_n;
 tire.rolling_radius_m = state.tire_rolling_radius_m;
+if state.tire_preset == "tire_mfeval_qss_local"
+    tire.provenance.gui_override_applied = any(abs([ ...
+        tire.Fz_ref_N - exported.Fz_ref_N, ...
+        tire.mu_x_ref - exported.mu_x_ref, ...
+        tire.mu_y_ref - exported.mu_y_ref, ...
+        tire.load_sensitivity_x - exported.load_sensitivity_x, ...
+        tire.load_sensitivity_y - exported.load_sensitivity_y, ...
+        tire.combined_n - exported.combined_n]) > 1e-12);
+    tire.provenance.runtime_parameter_source = ...
+        "offline QSS envelope initialized into user-editable GUI fields";
+end
 
 aero = aero_baseline();
 aero.CLA_m2 = state.aero_CLA_m2;
@@ -129,12 +158,22 @@ options.v_max_mps = state.options_v_max_mps;
 options.v_grid_mps = makeSpeedGrid( ...
     state.options_v_max_mps, state.options_v_grid_step_mps);
 options.solver_tolerance_mps = state.options_solver_tolerance_mps;
+event = trackPresetEvent(state.track_preset);
+if ismember(string(state.track_preset), ...
+        ["fsc_2025_acceleration_open", ...
+        "fsc_2025_skidpad_event_open"])
+    options.start_speed_mps = 0;
+    options.finish_speed_mps = NaN;
+end
 
 config = struct( ...
     track=track, ...
     vehicle=vehicle, ...
     models=models, ...
     options=options);
+if ~isempty(fieldnames(event))
+    config.event = event;
+end
 end
 
 function filePath = resolveProjectFile(projectRoot, relativePath)
@@ -164,8 +203,44 @@ end
 end
 
 function requirePreset(actual, expected, groupName)
-if actual ~= expected
+if ~ismember(actual, expected)
     fail("Unsupported " + groupName + " preset: " + actual);
+end
+end
+
+function sourceFile = trackPresetSourceFile(preset)
+switch string(preset)
+    case "tianji_kart_QSS_track_closed"
+        sourceFile = "data/track/tianji_kart_QSS_track_closed.csv";
+    case "fsec_hefei_2025_high_speed_avoidance_closed"
+        sourceFile = ...
+            "data/track/fsec_hefei_2025_high_speed_avoidance_closed.csv";
+    case "fsc_2025_acceleration_open"
+        sourceFile = "data/track/fsc_2025_acceleration_open.csv";
+    case "fsc_2025_skidpad_event_open"
+        sourceFile = "data/track/fsc_2025_skidpad_event_open.csv";
+    otherwise
+        fail("Unsupported track preset: " + preset);
+end
+end
+
+function event = trackPresetEvent(preset)
+event = struct();
+switch string(preset)
+    case "fsc_2025_acceleration_open"
+        event = struct( ...
+            type="fsc_acceleration", ...
+            rollout_distance_m=0.30, ...
+            timed_distance_m=75, ...
+            minimum_width_m=4.9);
+    case "fsc_2025_skidpad_event_open"
+        radius_m = 9.125;
+        event = struct( ...
+            type="fsc_skidpad", ...
+            centerline_radius_m=radius_m, ...
+            circle_length_m=2 * pi * radius_m, ...
+            timed_laps=[2; 4], ...
+            scoring_diameter_m=17.10);
 end
 end
 
