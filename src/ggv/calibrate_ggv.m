@@ -38,7 +38,8 @@ rawBrakeScale = realBrakeAtModel_g ./ modelBrake0_g;
 
 scaleTable = table(modelSpeed_mps, scaleLat, scaleAccel, scaleBrake, ...
     VariableNames=["v_mps", "scale_lat", "scale_acc", "scale_brake"]);
-ggvCalibrated = apply_ggv_calibration_scales(ggvModel, scaleTable);
+[ggvCalibrated, projectionReport] = ...
+    apply_ggv_calibration_scales(ggvModel, scaleTable);
 ggvCalibrated.source = "calibrated(" + string(ggvModel.source) + ")";
 ggvCalibrated.notes = "Bounded residual calibration from " ...
     + string(ggvReal.source);
@@ -54,6 +55,7 @@ report.scale_min = options.scale_min;
 report.scale_max = options.scale_max;
 report.model_source = string(ggvModel.source);
 report.real_source = string(ggvReal.source);
+report.hard_limit_projection = projectionReport;
 report.file = "";
 
 if strlength(string(options.calibration_report_file)) > 0

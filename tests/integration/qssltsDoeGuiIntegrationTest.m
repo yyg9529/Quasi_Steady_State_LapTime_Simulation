@@ -28,7 +28,8 @@ classdef qssltsDoeGuiIntegrationTest < matlab.unittest.TestCase
         function testSynchronousDoeStoresSeparateResult(testCase)
             app = QssltsApp(false);
             testCase.addTeardown(@() delete(app));
-            cases = table([295; 305], VariableNames="mass_kg");
+            inputTable = findobj(app.UIFigure, Tag="doe-input-table");
+            cases = inputTable.Data(2, :);
 
             app.runDoe(cases, true);
             doeResult = app.getLastDoeResult();
@@ -36,7 +37,11 @@ classdef qssltsDoeGuiIntegrationTest < matlab.unittest.TestCase
             rankingTable = findobj(app.UIFigure, ...
                 Tag="doe-ranking-table");
 
-            testCase.verifyEqual(height(doeResult.ranking), 2);
+            testCase.verifyEqual(height(doeResult.ranking), 1);
+            testCase.verifyEqual(doeResult.parameter_names, ...
+                string(cases.Properties.VariableNames));
+            testCase.verifyTrue(all(isfinite( ...
+                doeResult.ranking.lap_time_s)));
             testCase.verifyEmpty(fieldnames(lapResult));
             testCase.verifyEqual(rankingTable.Data, doeResult.ranking);
             testCase.verifyEqual(app.ActivePage, "doe");

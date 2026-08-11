@@ -1,4 +1,5 @@
-function ggvCalibrated = apply_ggv_calibration_scales(ggv, scaleTable)
+function [ggvCalibrated, projectionReport] = ...
+        apply_ggv_calibration_scales(ggv, scaleTable)
 %APPLY_GGV_CALIBRATION_SCALES Apply an already identified scale table.
 %   This function is used by DOE so every design case receives the frozen
 %   baseline residual correction instead of being re-fitted to the same car.
@@ -71,6 +72,8 @@ if isfield(ggv, "ax_min_lateral_boundary_g")
 end
 ggvCalibrated.source = "frozen_calibration(" + string(ggv.source) + ")";
 ggvCalibrated.calibration_scale_table = scaleTable;
+[ggvCalibrated, projectionReport] = project_ggv_to_hard_limits( ...
+    ggvCalibrated, ggv);
 end
 
 function index = nearestAyIndex(ayGrid_g, value_g)

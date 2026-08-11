@@ -28,10 +28,19 @@ else
         optionalModel(models, "aero"), optionalModel(models, "powertrain"), ...
         optionalModel(models, "brake"), options);
 end
-calibrationReport = struct();
+calibrationReport = prebuiltCalibrationReport(ggv);
 if isfield(models, "ggv_real") && ~isempty(models.ggv_real)
     [ggv, calibrationReport] = calibrate_ggv( ...
         ggv, models.ggv_real, options);
+end
+ggvHealth = assess_ggv_health(ggv, options);
+if ggvHealth.structure.status == "fail" ...
+        || ggvHealth.finite_data.status == "fail" ...
+        || ggvHealth.feasible_domain.status == "fail" ...
+        || ggvHealth.gravity_consistency.status == "fail"
+    error("QSSLTS:GGVUnusable", ...
+        "GGV structural/data health failed: %s", ...
+        strjoin(ggvHealth.reason_codes, ", "));
 end
 
 [vLat_mps, lateralLimiter] = calc_lateral_speed_limit(track, ggv, options);
@@ -104,12 +113,40 @@ result.cumulative_time_s = cumulativeTime_s;
 result.track = track;
 result.calibration_report = calibrationReport;
 result.solver.converged = converged;
+result.solver.propagation_converged = converged;
 result.solver.iterations = iIteration;
 result.solver.max_change_mps = maxChange_mps;
+result.propagation_converged = converged;
+result.ggv_health = ggvHealth;
+result.ggv_healthy = ggvHealth.valid;
 if hasEnabledCompositePowertrain
     result.powertrain = powertrainResult;
     result.energy = energy;
     result.active_constraints = activeConstraints;
+end
+result.constraint_audit = audit_lap_constraints( ...
+    result, vehicle, models, options);
+result.valid = converged && ggvHealth.valid ...
+    && result.constraint_audit.valid;
+assessment = assess_analysis_result(result);
+result.valid = assessment.valid;
+result.status = assessment.status;
+result.reject_reason = assessment.reject_reason;
+end
+
+function report = prebuiltCalibrationReport(ggv)
+report = struct();
+if isfield(ggv, "calibration_report") ...
+        && isstruct(ggv.calibration_report)
+    report = ggv.calibration_report;
+    return
+end
+if isfield(ggv, "calibration_scale_table")
+    report.scale_table = ggv.calibration_scale_table;
+end
+if isfield(ggv, "hard_limit_projection_report")
+    report.hard_limit_projection = ...
+        ggv.hard_limit_projection_report;
 end
 end
 

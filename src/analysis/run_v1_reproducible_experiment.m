@@ -10,6 +10,10 @@ function report = run_v1_reproducible_experiment(outputDir)
     baseConfig = buildBaselineConfig(projectRoot);
     doeTable = buildDoeTable();
     doe = run_doe(baseConfig, doeTable);
+    if doe.status ~= "complete"
+        error("QSSLTS:V1ExperimentConvergence", ...
+            "The reproducible V1 report requires every DOE case to be valid.");
+    end
     baselineResult = doe.baseline_result;
     baselineSummary = summarize_lap_result(baselineResult);
     baselineLimiter = summarize_limiter_usage(baselineResult);
@@ -135,7 +139,7 @@ function manifest = makeManifest(config, doe, projectRoot)
     manifest.experiment_id = "theory_only_simple_track_27_case_doe";
     manifest.track_input = "data/track/simple_track.csv";
     manifest.calibration_mode = doe.calibration_mode;
-    manifest.doe_case_count = height(doe.ranking);
+    manifest.doe_case_count = doe.total_case_count;
     manifest.gravity_mps2 = config.options.gravity_mps2;
     manifest.v_grid_mps = config.options.v_grid_mps.';
     manifest.ay_grid_g = config.options.ay_grid_g;
@@ -159,9 +163,11 @@ function manifest = makeManifest(config, doe, projectRoot)
     manifest.doe.mass_kg = [280; 300; 320];
     manifest.doe.inverter_power_W = [60000; 80000; 100000];
     manifest.doe.tire_mu_scale = [0.9; 1.0; 1.1];
-    manifest.doe.case_count = height(doe.ranking);
-    manifest.doe.all_cases_converged = all(cellfun( ...
-        @(result) result.solver.converged, doe.case_results));
+    manifest.doe.case_count = doe.total_case_count;
+    manifest.doe.valid_case_count = doe.valid_case_count;
+    manifest.doe.rejected_case_count = doe.rejected_case_count;
+    manifest.doe.status = doe.status;
+    manifest.doe.all_cases_converged = all(doe.all_cases.valid);
     manifest.doe.all_lap_times_finite = all(isfinite( ...
         doe.ranking.lap_time_s));
     manifest.doe.calibration_mode = doe.calibration_mode;

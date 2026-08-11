@@ -31,6 +31,15 @@ switch parameterLower
         config.vehicle.mass.total_kg = value;
     case {"cgh", "cg_height_m"}
         config.vehicle.mass.cg_height_m = value;
+    case {"yaw_inertia", "inertia_iz_kgm2"}
+        requirePositiveScalar(value, "yaw inertia");
+        config.vehicle.inertia.Iz_kgm2 = value;
+    case {"front_static_frac", "front_axle_load_frac"}
+        requireFraction(value, "front static load fraction");
+        config.vehicle.mass.front_static_frac = value;
+    case {"wheelbase", "wheelbase_m"}
+        requirePositiveScalar(value, "wheelbase");
+        config.vehicle.geometry.wheelbase_m = value;
     case {"track_front", "track_front_m"}
         config.vehicle.geometry.track_front_m = value;
     case {"track_rear", "track_rear_m"}
@@ -61,6 +70,22 @@ if ~isscalar(newRatio) || ~isfinite(newRatio) || newRatio <= 0
     error("QSSLTS:GearRatio", "Gear ratio must be positive and finite.");
 end
 config.models.powertrain.gear_ratio = newRatio;
+end
+
+function requirePositiveScalar(value, name)
+if ~isnumeric(value) || ~isreal(value) || ~isscalar(value) ...
+        || ~isfinite(value) || value <= 0
+    error("QSSLTS:AnalysisParameter", ...
+        "%s must be a positive finite real scalar.", name);
+end
+end
+
+function requireFraction(value, name)
+if ~isnumeric(value) || ~isreal(value) || ~isscalar(value) ...
+        || ~isfinite(value) || value < 0 || value > 1
+    error("QSSLTS:AnalysisParameter", ...
+        "%s must be a finite real scalar in [0, 1].", name);
+end
 end
 
 function config = validateCompositePowertrain(config)
