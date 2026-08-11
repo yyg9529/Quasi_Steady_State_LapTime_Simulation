@@ -162,6 +162,13 @@ classdef analysisPowertrainMigrationTest < matlab.unittest.TestCase
             testCase.verifyEqual(output.models.powertrain, expected);
         end
 
+        function testDottedGearRatioRejectsVector(testCase)
+            action = @() apply_analysis_parameter(testCase.Config, ...
+                "models.powertrain.gear_ratio", [4, 5]);
+
+            testCase.verifyError(action, "QSSLTS:PowertrainConfig");
+        end
+
         function testLegacyMaxPowerAliasIsRejected(testCase)
             action = @() apply_analysis_parameter(testCase.Config, ...
                 "max_power_W", 70000);

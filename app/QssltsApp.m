@@ -32,6 +32,7 @@ classdef QssltsApp < handle
         DoeRunButton
         DoeStatusLabel
         DoeInputTable
+        DoeDefaultTable = table()
         DoeRankingTable
         DoeResponseAxes
         DoeTimer = []
@@ -89,6 +90,9 @@ classdef QssltsApp < handle
             if ~ismember(pageName, validPages)
                 error("QSSLTS:AppPage", ...
                     "Unknown GUI page: %s", pageName);
+            end
+            if pageName == "doe"
+                app.synchronizeDoeInputTable();
             end
 
             for name = validPages
@@ -697,7 +701,7 @@ classdef QssltsApp < handle
                 "Independent DOE result state, ranking, and response view");
 
             content = uigridlayout(grid, [1 2]);
-            content.ColumnWidth = {420, "1x"};
+            content.ColumnWidth = {560, "1x"};
             content.Padding = [0 0 0 0];
             content.ColumnSpacing = 16;
             content.BackgroundColor = app.Canvas;
@@ -708,10 +712,19 @@ classdef QssltsApp < handle
             setupGrid.Padding = [14 12 14 12];
             setupGrid.RowSpacing = 10;
             setupGrid.BackgroundColor = app.Surface;
-            app.DoeInputTable = uitable(setupGrid, ...
-                Data=table([290; 300; 310], ...
-                    VariableNames="mass_kg"), ...
-                ColumnEditable=true, Tag="doe-input-table");
+            doeTable = app.makeDefaultDoeInputTable();
+            app.DoeDefaultTable = doeTable;
+            columnNames = ["整车质量 (kg)", "重心高度 (m)", ...
+                "横摆惯量 Iz (kg·m²)", "前轴静载比例 (-)", ...
+                "轴距 (m)", "前轮距 (m)", "后轮距 (m)", ...
+                "CLA (m²)", "CDA (m²)", ...
+                "前轴下压力比例 (-)", "总传动比 (-)"];
+            app.DoeInputTable = uitable(setupGrid, Data=doeTable, ...
+                ColumnName=columnNames, ...
+                ColumnWidth=repmat({118}, 1, width(doeTable)), ...
+                ColumnEditable=true, ...
+                RowName={"Case 1"; "Case 2"; "Case 3"}, ...
+                Tag="doe-input-table");
             app.DoeRunButton = uibutton(setupGrid, "push", ...
                 Text="Run DOE", Tag="run-doe", ...
                 FontWeight="bold", BackgroundColor=app.Accent, ...
@@ -719,7 +732,7 @@ classdef QssltsApp < handle
                 ButtonPushedFcn=@(~,~) app.toggleDoe());
             app.DoeStatusLabel = uilabel(setupGrid, ...
                 Text="DOE has not run", FontColor=app.Muted, ...
-                HorizontalAlignment="center");
+                HorizontalAlignment="center", Tag="doe-status");
 
             responseCard = app.createCard(content, "DOE response");
             responseGrid = uigridlayout(responseCard, [2 1]);
@@ -737,8 +750,9 @@ classdef QssltsApp < handle
                 Tag="doe-ranking-table");
 
             uilabel(grid, Text= ...
-                "DOE results are stored separately from the latest lap result.", ...
-                FontColor=app.Muted, HorizontalAlignment="center");
+                "DOE 结果独立保存；横摆转动惯量 Iz 已可输入，但当前固定赛线 QSS 圈时未使用该参数。", ...
+                FontColor=app.Muted, HorizontalAlignment="center", ...
+                Tag="doe-model-boundary");
         end
 
         function page = createPagePanel(app, tag)
@@ -1274,6 +1288,7 @@ classdef QssltsApp < handle
                 return
             end
             try
+                app.synchronizeDoeInputTable();
                 app.runDoe(app.DoeInputTable.Data, false);
             catch exception
                 if isgraphics(app.UIFigure)
@@ -1281,6 +1296,52 @@ classdef QssltsApp < handle
                         "DOE failed to start", Icon="error");
                 end
             end
+        end
+
+        function doeTable = makeDefaultDoeInputTable(app)
+            state = app.getParameterState();
+            mass_kg = state.vehicle_mass_total_kg + [-10; 0; 10];
+            cg_height_m = repmat(state.vehicle_cg_height_m, 3, 1);
+            inertia_Iz_kgm2 = repmat( ...
+                state.vehicle_inertia_Iz_kgm2, 3, 1);
+            front_static_frac = repmat( ...
+                state.vehicle_front_static_frac, 3, 1);
+            wheelbase_m = repmat(state.vehicle_wheelbase_m, 3, 1);
+            track_front_m = repmat(state.vehicle_track_front_m, 3, 1);
+            track_rear_m = repmat(state.vehicle_track_rear_m, 3, 1);
+            cla_m2 = repmat(state.aero_CLA_m2, 3, 1);
+            cda_m2 = repmat(state.aero_CDA_m2, 3, 1);
+            front_downforce_frac = repmat( ...
+                state.aero_front_downforce_frac, 3, 1);
+            gear_ratio = repmat(state.powertrain_gear_ratio, 3, 1);
+            doeTable = table(mass_kg, cg_height_m, inertia_Iz_kgm2, ...
+                front_static_frac, wheelbase_m, track_front_m, ...
+                track_rear_m, cla_m2, cda_m2, ...
+                front_downforce_frac, gear_ratio);
+        end
+
+        function synchronizeDoeInputTable(app)
+            if isempty(app.DoeInputTable) ...
+                    || ~isgraphics(app.DoeInputTable) ...
+                    || isempty(app.DoeDefaultTable)
+                return
+            end
+            currentTable = app.DoeInputTable.Data;
+            previousDefault = app.DoeDefaultTable;
+            nextDefault = app.makeDefaultDoeInputTable();
+            currentNames = string(currentTable.Properties.VariableNames);
+            defaultNames = string(previousDefault.Properties.VariableNames);
+            if ~isequal(currentNames, defaultNames)
+                return
+            end
+            % Rebase only untouched columns; user-designed levels persist.
+            for name = currentNames
+                if isequaln(currentTable.(name), previousDefault.(name))
+                    currentTable.(name) = nextDefault.(name);
+                end
+            end
+            app.DoeInputTable.Data = currentTable;
+            app.DoeDefaultTable = nextDefault;
         end
 
         function beginDoe(app)
@@ -1317,9 +1378,25 @@ classdef QssltsApp < handle
             app.DoeFuture = [];
             app.stopDoeTimer();
             app.renderDoeResult(result);
-            app.restoreDoeControls(sprintf( ...
-                "DOE complete: %d cases", height(result.ranking)), ...
-                app.Accent);
+            switch string(result.status)
+                case "complete"
+                    statusText = sprintf("DOE complete: %d valid / 0 rejected", ...
+                        result.valid_case_count);
+                    statusColor = app.Accent;
+                case "partial"
+                    statusText = sprintf("DOE partial: %d valid / %d rejected", ...
+                        result.valid_case_count, result.rejected_case_count);
+                    statusColor = app.Warning;
+                case "no_valid_cases"
+                    statusText = sprintf( ...
+                        "DOE no valid cases: 0 valid / %d rejected", ...
+                        result.rejected_case_count);
+                    statusColor = app.Warning;
+                otherwise
+                    error("QSSLTS:DOEStatus", ...
+                        "Unsupported DOE result status: %s", result.status);
+            end
+            app.restoreDoeControls(statusText, statusColor);
             app.selectPage("doe");
         end
 
@@ -1364,6 +1441,18 @@ classdef QssltsApp < handle
             app.DoeRankingTable.Data = result.ranking;
             ax = app.DoeResponseAxes;
             cla(ax);
+            if isempty(result.ranking)
+                text(ax, 0.5, 0.5, "No valid DOE cases", ...
+                    Units="normalized", HorizontalAlignment="center", ...
+                    Color=app.Warning, Tag="doe-no-valid-message");
+                xlim(ax, [0 1]);
+                ylim(ax, [0 1]);
+                xlabel(ax, "Rank");
+                ylabel(ax, "Lap time (s)");
+                title(ax, "DOE has no valid cases");
+                grid(ax, "off");
+                return
+            end
             plot(ax, 1:height(result.ranking), ...
                 result.ranking.lap_time_s, "-o", ...
                 Color=app.Accent, MarkerFaceColor=app.Accent, ...

@@ -1,7 +1,7 @@
 function sweepResult = run_sensitivity_sweep(baseConfig, sweepDefinition)
-%RUN_SENSITIVITY_SWEEP Run one-parameter QSS sensitivity cases.
-%   Every case regenerates theoretical GGV. If real GGV is supplied, one
-%   baseline residual scale table is frozen and applied to every case.
+%RUN_SENSITIVITY_SWEEP Run valid-only one-parameter sensitivity cases.
+%   Case execution and rejection use the same contract as run_doe so invalid
+%   designs cannot enter the sensitivity curve.
 
 arguments
     baseConfig (1,1) struct
@@ -18,36 +18,37 @@ end
 
 parameter = string(sweepDefinition.parameter);
 values = sweepDefinition.values(:);
-context = prepare_analysis_context(baseConfig);
-baselineResult = run_analysis_case( ...
-    context.base_config, context.scale_table);
-caseResults = cell(numel(values), 1);
-lapTime_s = zeros(numel(values), 1);
+caseTable = table(values);
+caseTable.Properties.VariableNames = cellstr(parameter);
+doe = run_doe(baseConfig, caseTable);
+validCases = doe.all_cases(doe.all_cases.valid, :);
+validValues = validCases.(parameter);
 
-for iCase = 1:numel(values)
-    caseConfig = apply_analysis_parameter( ...
-        context.base_config, parameter, values(iCase));
-    caseResults{iCase} = run_analysis_case(caseConfig, context.scale_table);
-    lapTime_s(iCase) = caseResults{iCase}.lap_time_s;
-end
-
-deltaLapTime_s = lapTime_s - baselineResult.lap_time_s;
-sweepResult.table = table(values, lapTime_s, deltaLapTime_s, ...
+sweepResult.table = table(validValues, validCases.lap_time_s, ...
+    validCases.delta_lap_time_s, ...
     VariableNames=["parameter_value", "lap_time_s", "delta_lap_time_s"]);
 sweepResult.parameter = parameter;
-sweepResult.baseline_lap_time_s = baselineResult.lap_time_s;
-sweepResult.case_results = caseResults;
-sweepResult.calibration_mode = context.calibration_mode;
+sweepResult.baseline_lap_time_s = doe.baseline_lap_time_s;
+sweepResult.baseline_result = doe.baseline_result;
+sweepResult.case_results = doe.case_results;
+sweepResult.case_assessments = doe.case_assessments;
+sweepResult.calibration_mode = doe.calibration_mode;
+sweepResult.all_cases = doe.all_cases;
+sweepResult.rejected_cases = doe.rejected_cases;
+sweepResult.valid_case_count = doe.valid_case_count;
+sweepResult.rejected_case_count = doe.rejected_case_count;
+sweepResult.status = doe.status;
 sweepResult.figure = gobjects(0);
 
 makePlot = isfield(sweepDefinition, "make_plot") ...
     && logical(sweepDefinition.make_plot);
 if makePlot
     sweepResult.figure = figure(Name="QSSLTS sensitivity: " + parameter);
-    plot(values, lapTime_s, "o-", LineWidth=1.5);
+    plot(sweepResult.table.parameter_value, ...
+        sweepResult.table.lap_time_s, "o-", LineWidth=1.5);
     grid on
     xlabel(strrep(parameter, "_", "\_"));
     ylabel("Lap time [s]");
-    title("Parameter sensitivity");
+    title("Valid-only parameter sensitivity");
 end
 end
